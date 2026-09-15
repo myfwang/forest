@@ -1,21 +1,25 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { Doc } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  MutationCtx,
+  query,
+} from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
+import { requireOwnedNode, requireUserId } from "./lib";
 
 /**
- * Get a node with its full path from root (for breadcrumbs)
+ * Get a node with its full path from root (for breadcrumbs and prompting).
  */
 export const getNodeWithPath = query({
   args: { nodeId: v.id("nodes") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    const userId = await requireUserId(ctx);
 
     const node = await ctx.db.get(args.nodeId);
     if (!node || node.userId !== userId) return null;
 
-    // Build path from root to current node
     const path: Doc<"nodes">[] = [node];
     let currentNode = node;
 
@@ -31,28 +35,79 @@ export const getNodeWithPath = query({
 });
 
 /**
- * Get child nodes for a given parent node
+ * Path from the tree's root down to a node, without an auth check, so that
+ * scheduled generation can read the conversation context it needs.
  */
-export const getNodeChildren = query({
-  args: {
-    nodeId: v.id("nodes"),
-  },
+export const getPathForGeneration = internalQuery({
+  args: { nodeId: v.id("nodes") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    const node = await ctx.db.get(args.nodeId);
+    if (!node) return null;
 
-    const children = await ctx.db
+    const path: Doc<"nodes">[] = [node];
+    let currentNode = node;
+
+    while (currentNode.parentNodeId) {
+      const parent = await ctx.db.get(currentNode.parentNodeId);
+      if (!parent) break;
+      path.unshift(parent);
+      currentNode = parent;
+    }
+
+    return { node, path };
+  },
+});
+
+export const getNodeChildren = query({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+
+    return await ctx.db
       .query("nodes")
       .withIndex("by_parent", (q) => q.eq("parentNodeId", args.nodeId))
       .filter((q) => q.eq(q.field("userId"), userId))
       .collect();
-
-    return children;
   },
 });
 
+async function insertSibling(
+  ctx: MutationCtx,
+  node: Doc<"nodes">,
+  userPrompt: string,
+  model: string | undefined,
+): Promise<Id<"nodes">> {
+  const now = Date.now();
+
+  const nodeId = await ctx.db.insert("nodes", {
+    treeId: node.treeId,
+    userId: node.userId,
+    parentNodeId: node.parentNodeId,
+    userPrompt,
+    aiResponseStatus: "pending",
+    depth: node.depth,
+    childCount: 0,
+    revisionOfNodeId: node._id,
+    createdAt: now,
+    model: model ?? node.model,
+  });
+
+  if (node.parentNodeId) {
+    const parent = await ctx.db.get(node.parentNodeId);
+    if (parent) {
+      await ctx.db.patch(node.parentNodeId, {
+        childCount: parent.childCount + 1,
+      });
+    }
+  }
+
+  await ctx.db.patch(node.treeId, { updatedAt: now });
+
+  return nodeId;
+}
+
 /**
- * Create a new branch (node) from a parent node
+ * Continue the conversation: add a child prompt under an existing node.
  */
 export const createBranch = mutation({
   args: {
@@ -61,23 +116,19 @@ export const createBranch = mutation({
     model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    const userId = await requireUserId(ctx);
+    const parent = await requireOwnedNode(ctx, args.parentNodeId, userId);
 
-    // Verify parent ownership
-    const parent = await ctx.db.get(args.parentNodeId);
-    if (!parent || parent.userId !== userId) {
-      throw new Error("Parent node not found");
-    }
+    const userPrompt = args.userPrompt.trim();
+    if (userPrompt.length === 0) throw new Error("Prompt cannot be empty");
 
     const now = Date.now();
 
-    // Create new node
     const nodeId = await ctx.db.insert("nodes", {
       treeId: parent.treeId,
       userId,
       parentNodeId: args.parentNodeId,
-      userPrompt: args.userPrompt,
+      userPrompt,
       aiResponseStatus: "pending",
       depth: parent.depth + 1,
       childCount: 0,
@@ -85,42 +136,97 @@ export const createBranch = mutation({
       model: args.model ?? parent.model,
     });
 
-    // Update parent's child count
     await ctx.db.patch(args.parentNodeId, {
       childCount: parent.childCount + 1,
     });
-
-    // Update tree's updatedAt
-    await ctx.db.patch(parent.treeId, {
-      updatedAt: now,
-    });
+    await ctx.db.patch(parent.treeId, { updatedAt: now });
 
     return { nodeId, treeId: parent.treeId };
   },
 });
 
 /**
- * Update a node's AI response (used for streaming and completion)
+ * Rewrite a prompt that has already been sent. The revision becomes a sibling
+ * of the original, so the old wording and everything below it stays intact
+ * while the new branch starts from the same context.
  */
-export const updateNodeResponse = mutation({
+export const reviseNode = mutation({
+  args: {
+    nodeId: v.id("nodes"),
+    userPrompt: v.string(),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, args.nodeId, userId);
+
+    const userPrompt = args.userPrompt.trim();
+    if (userPrompt.length === 0) throw new Error("Prompt cannot be empty");
+
+    const nodeId = await insertSibling(ctx, node, userPrompt, args.model);
+    return { nodeId, treeId: node.treeId };
+  },
+});
+
+/**
+ * Ask the same question again on a fresh branch.
+ */
+export const regenerateNode = mutation({
+  args: {
+    nodeId: v.id("nodes"),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, args.nodeId, userId);
+
+    const nodeId = await insertSibling(
+      ctx,
+      node,
+      node.userPrompt,
+      args.model ?? node.model,
+    );
+    return { nodeId, treeId: node.treeId };
+  },
+});
+
+/**
+ * Persist a node's position in the graph view.
+ */
+export const setNodePosition = mutation({
+  args: {
+    nodeId: v.id("nodes"),
+    positionX: v.number(),
+    positionY: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireOwnedNode(ctx, args.nodeId, userId);
+
+    await ctx.db.patch(args.nodeId, {
+      positionX: args.positionX,
+      positionY: args.positionY,
+    });
+  },
+});
+
+/**
+ * Update a node's AI response (used while streaming and on completion).
+ */
+export const updateNodeResponse = internalMutation({
   args: {
     nodeId: v.id("nodes"),
     aiResponse: v.string(),
     status: v.union(
       v.literal("streaming"),
       v.literal("complete"),
-      v.literal("error")
+      v.literal("error"),
     ),
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
-
     const node = await ctx.db.get(args.nodeId);
-    if (!node || node.userId !== userId) {
-      throw new Error("Unauthorized");
-    }
+    if (!node) return;
 
     await ctx.db.patch(args.nodeId, {
       aiResponse: args.aiResponse,
@@ -131,68 +237,75 @@ export const updateNodeResponse = mutation({
 });
 
 /**
- * Delete a node and all its descendants
+ * Delete a node and all of its descendants.
  */
 export const deleteNode = mutation({
-  args: {
-    nodeId: v.id("nodes"),
-  },
+  args: { nodeId: v.id("nodes") },
   handler: async (ctx, { nodeId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, nodeId, userId);
 
-    const node = await ctx.db.get(nodeId);
-    if (!node || node.userId !== userId) {
-      throw new Error("Node not found or unauthorized");
-    }
-
-    // Prevent deleting root node
     if (!node.parentNodeId) {
-      throw new Error("Cannot delete the root node");
+      const roots = await ctx.db
+        .query("nodes")
+        .withIndex("by_tree", (q) => q.eq("treeId", node.treeId))
+        .collect();
+      const otherRoots = roots.filter(
+        (candidate) => !candidate.parentNodeId && candidate._id !== nodeId,
+      );
+      if (otherRoots.length === 0) {
+        throw new Error("Cannot delete the only root prompt of a tree");
+      }
     }
 
-    // Helper function to recursively delete a node and its descendants
-    const deleteNodeRecursive = async (nodeId: Doc<"nodes">["_id"]) => {
-      // Get all children first
+    const deleteNodeRecursive = async (id: Id<"nodes">) => {
       const children = await ctx.db
         .query("nodes")
-        .withIndex("by_parent", (q) => q.eq("parentNodeId", nodeId))
+        .withIndex("by_parent", (q) => q.eq("parentNodeId", id))
         .collect();
 
-      // Recursively delete all children
       for (const child of children) {
         await deleteNodeRecursive(child._id);
       }
 
-      // Delete all notes for this node
       const notes = await ctx.db
         .query("notes")
-        .withIndex("by_node", (q) => q.eq("nodeId", nodeId))
+        .withIndex("by_node", (q) => q.eq("nodeId", id))
         .collect();
 
       for (const note of notes) {
         await ctx.db.delete(note._id);
       }
 
-      // Delete the node itself
-      await ctx.db.delete(nodeId);
+      await ctx.db.delete(id);
     };
 
-    // Start recursive deletion
     await deleteNodeRecursive(nodeId);
 
-    // Update parent's child count
-    const parent = await ctx.db.get(node.parentNodeId);
-    if (parent) {
-      await ctx.db.patch(node.parentNodeId, {
-        childCount: parent.childCount - 1,
-      });
+    if (node.parentNodeId) {
+      const parent = await ctx.db.get(node.parentNodeId);
+      if (parent) {
+        await ctx.db.patch(node.parentNodeId, {
+          childCount: Math.max(0, parent.childCount - 1),
+        });
+      }
     }
 
-    // Update tree's updatedAt
-    await ctx.db.patch(node.treeId, {
-      updatedAt: Date.now(),
-    });
+    const tree = await ctx.db.get(node.treeId);
+    if (tree) {
+      const patch: { updatedAt: number; rootNodeId?: Id<"nodes"> } = {
+        updatedAt: Date.now(),
+      };
+      if (tree.rootNodeId === nodeId) {
+        const remainingRoots = await ctx.db
+          .query("nodes")
+          .withIndex("by_tree", (q) => q.eq("treeId", node.treeId))
+          .collect();
+        const nextRoot = remainingRoots.find((n) => !n.parentNodeId);
+        if (nextRoot) patch.rootNodeId = nextRoot._id;
+      }
+      await ctx.db.patch(node.treeId, patch);
+    }
 
     return { success: true };
   },

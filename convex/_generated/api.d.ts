@@ -10,7 +10,9 @@
 
 import type * as ai from "../ai.js";
 import type * as auth from "../auth.js";
+import type * as gardens from "../gardens.js";
 import type * as http from "../http.js";
+import type * as lib from "../lib.js";
 import type * as nodes from "../nodes.js";
 import type * as notes from "../notes.js";
 import type * as trees from "../trees.js";
@@ -24,7 +26,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   auth: typeof auth;
+  gardens: typeof gardens;
   http: typeof http;
+  lib: typeof lib;
   nodes: typeof nodes;
   notes: typeof notes;
   trees: typeof trees;

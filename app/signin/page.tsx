@@ -15,12 +15,7 @@ export default function SignIn() {
     <div className="flex flex-col gap-8 w-full max-w-lg mx-auto h-screen justify-center items-center px-4">
       <div className="text-center flex flex-col items-center gap-4">
         <div className="flex items-center gap-6">
-          <Image
-            src="/convex.svg"
-            alt="Convex Logo"
-            width={90}
-            height={90}
-          />
+          <Image src="/convex.svg" alt="Convex Logo" width={90} height={90} />
           <div className="w-px h-20 bg-slate-300 dark:bg-slate-600"></div>
           <Image
             src="/nextjs-icon-light-background.svg"

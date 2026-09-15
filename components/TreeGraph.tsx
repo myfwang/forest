@@ -1,244 +1,255 @@
 "use client";
 
 import {
-  ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
+  Edge,
+  Handle,
+  Node,
+  NodeProps,
+  Position,
+  ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Doc, Id } from "@/convex/_generated/dataModel";
-import { useState } from "react";
+import { Id } from "@/convex/_generated/dataModel";
+import { useMemo, useState } from "react";
+import { childrenByParent, NodeDoc, rootNodes } from "@/lib/tree";
 
 interface TreeGraphProps {
-  nodes: Doc<"nodes">[];
+  nodes: NodeDoc[];
   selectedNodeId: Id<"nodes"> | null;
   onNodeClick: (nodeId: Id<"nodes">) => void;
-  currentPath: Doc<"nodes">[];
+  currentPath: NodeDoc[];
+  noteCounts: Map<string, number>;
   onAddNote?: (nodeId: Id<"nodes">) => void;
   onDeleteNode?: (nodeId: Id<"nodes">) => void;
+  onMoveNode?: (nodeId: Id<"nodes">, x: number, y: number) => void;
 }
 
-interface CustomNodeData {
+type CustomNodeData = {
   label: string;
-  depth: number;
-  branches: number;
-  isRoot: boolean;
-  background: string;
-  color: string;
-  border: string;
+  status: NodeDoc["aiResponseStatus"];
+  isRevision: boolean;
+  noteCount: number;
+  selected: boolean;
+  onPath: boolean;
   onAddNote?: () => void;
   onDeleteNode?: () => void;
-}
+};
 
-// Custom node component with 3-dot menu
-function CustomNode({ data }: { data: CustomNodeData }) {
+const HORIZONTAL_SPACING = 280;
+const VERTICAL_SPACING = 170;
+
+const STATUS_LABEL: Record<NodeDoc["aiResponseStatus"], string> = {
+  pending: "queued",
+  streaming: "writing…",
+  complete: "answered",
+  error: "failed",
+};
+
+function CustomNode({ data }: NodeProps) {
+  const nodeData = data as CustomNodeData;
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const border = nodeData.selected
+    ? "border-emerald-500"
+    : nodeData.onPath
+      ? "border-emerald-300 dark:border-emerald-700"
+      : "border-slate-200 dark:border-slate-700";
 
   return (
     <div
-      style={{
-        position: "relative",
-        background: data.background,
-        color: data.color,
-        border: data.border,
-        padding: 12,
-        borderRadius: 8,
-        width: 220,
-        fontSize: 13,
-      }}
+      className={`relative w-[220px] rounded-lg border-2 bg-white dark:bg-slate-800 p-3 text-[13px] shadow-sm ${border}`}
     >
+      <Handle type="target" position={Position.Top} className="!bg-slate-400" />
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0 break-words">{data.label}</div>
-        {!data.isRoot && (
-          <div className="relative flex-shrink-0">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(!menuOpen);
-              }}
-              className="w-6 h-6 flex items-center justify-center rounded bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors font-bold"
-              style={{ fontSize: "18px", lineHeight: 1 }}
-              title="Node options"
-            >
-              ⋮
-            </button>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
+        <div className="min-w-0 flex-1 break-words text-slate-800 dark:text-slate-100">
+          {nodeData.label}
+        </div>
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(!menuOpen);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-lg font-bold leading-none text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            title="Prompt options"
+          >
+            ⋮
+          </button>
+          {menuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                }}
+              />
+              <div
+                className="absolute right-0 top-8 z-20 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setMenuOpen(false);
+                    nodeData.onAddNote?.();
                   }}
-                />
-                <div
-                  className="absolute right-0 top-8 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 min-w-[140px]"
-                  onClick={(e) => e.stopPropagation()}
+                  className="w-full px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
                 >
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpen(false);
-                      data.onAddNote?.();
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    Add Note
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpen(false);
-                      data.onDeleteNode?.();
-                    }}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    Delete Node
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                  Add note
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    nodeData.onDeleteNode?.();
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                >
+                  Delete branch
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <span>{STATUS_LABEL[nodeData.status]}</span>
+        {nodeData.isRevision && <span title="Revision of a sibling">✎</span>}
+        {nodeData.noteCount > 0 && <span>🗒 {nodeData.noteCount}</span>}
+      </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!bg-slate-400"
+      />
     </div>
   );
 }
 
-const nodeTypes = {
-  custom: CustomNode,
-};
+const nodeTypes = { custom: CustomNode };
+
+/**
+ * Lay the forest out top-down, giving every leaf its own column and centring
+ * parents over their children.
+ */
+function layout(
+  dbNodes: NodeDoc[],
+): Map<Id<"nodes">, { x: number; y: number }> {
+  const positions = new Map<Id<"nodes">, { x: number; y: number }>();
+  const children = childrenByParent(dbNodes);
+
+  let nextColumn = 0;
+
+  const place = (node: NodeDoc, depth: number): number => {
+    const kids = children.get(node._id) ?? [];
+
+    if (kids.length === 0) {
+      const column = nextColumn++;
+      positions.set(node._id, {
+        x: column * HORIZONTAL_SPACING,
+        y: depth * VERTICAL_SPACING,
+      });
+      return column;
+    }
+
+    const columns = kids.map((kid) => place(kid, depth + 1));
+    const column = (columns[0] + columns[columns.length - 1]) / 2;
+    positions.set(node._id, {
+      x: column * HORIZONTAL_SPACING,
+      y: depth * VERTICAL_SPACING,
+    });
+    return column;
+  };
+
+  for (const root of rootNodes(dbNodes)) {
+    place(root, 0);
+    nextColumn += 1;
+  }
+
+  return positions;
+}
 
 export function TreeGraph({
   nodes: dbNodes,
   selectedNodeId,
   onNodeClick,
   currentPath,
+  noteCounts,
   onAddNote,
   onDeleteNode,
+  onMoveNode,
 }: TreeGraphProps) {
-  // Build a map for quick lookups
-  const nodeMap = new Map<Id<"nodes">, Doc<"nodes">>();
-  dbNodes.forEach((node) => nodeMap.set(node._id, node));
+  const { nodes, edges } = useMemo(() => {
+    const positions = layout(dbNodes);
+    const pathIds = new Set(currentPath.map((node) => node._id));
 
-  // Find root node
-  const rootNode = dbNodes.find((n) => !n.parentNodeId);
-
-  // Calculate positions using tree layout
-  const positions = new Map<Id<"nodes">, { x: number; y: number }>();
-  const HORIZONTAL_SPACING = 300;
-  const VERTICAL_SPACING = 150;
-
-  if (rootNode) {
-    const calculatePositions = (
-      nodeId: Id<"nodes">,
-      depth: number,
-      offset: number
-    ): number => {
-      const node = nodeMap.get(nodeId);
-      if (!node) return offset;
-
-      const children = dbNodes.filter((n) => n.parentNodeId === nodeId);
-
-      if (children.length === 0) {
-        positions.set(nodeId, {
-          x: offset * HORIZONTAL_SPACING,
-          y: depth * VERTICAL_SPACING,
-        });
-        return offset + 1;
-      }
-
-      let currentOffset = offset;
-      const childOffsets: number[] = [];
-
-      children.forEach((child) => {
-        const childEndOffset = calculatePositions(
-          child._id,
-          depth + 1,
-          currentOffset
-        );
-        childOffsets.push((currentOffset + childEndOffset - 1) / 2);
-        currentOffset = childEndOffset;
-      });
-
-      const parentX = (childOffsets[0] + childOffsets[childOffsets.length - 1]) / 2;
-      positions.set(nodeId, {
-        x: parentX * HORIZONTAL_SPACING,
-        y: depth * VERTICAL_SPACING,
-      });
-
-      return currentOffset;
-    };
-
-    calculatePositions(rootNode._id, 0, 0);
-  }
-
-  // Create ReactFlow nodes with custom node type
-  const nodes: Node[] = dbNodes.map((node) => {
-    const pos = positions.get(node._id) || { x: 0, y: 0 };
-    const isSelected = node._id === selectedNodeId;
-    const isInPath = currentPath.some((n) => n._id === node._id);
-    const isRoot = !node.parentNodeId;
-
-    return {
-      id: String(node._id),
+    const flowNodes: Node[] = dbNodes.map((node) => ({
+      id: node._id,
       type: "custom",
-      position: pos,
+      position:
+        node.positionX !== undefined && node.positionY !== undefined
+          ? { x: node.positionX, y: node.positionY }
+          : (positions.get(node._id) ?? { x: 0, y: 0 }),
       data: {
-        label: node.userPrompt.substring(0, 100),
-        depth: node.depth,
-        branches: node.childCount,
-        isRoot,
-        background: isSelected ? '#64748b' : isInPath ? '#cbd5e1' : '#f1f5f9',
-        color: isSelected ? '#fff' : isInPath ? '#1e293b' : '#475569',
-        border: '2px solid ' + (isSelected ? '#475569' : isInPath ? '#94a3b8' : '#cbd5e1'),
+        label:
+          node.userPrompt.length > 90
+            ? `${node.userPrompt.slice(0, 90)}…`
+            : node.userPrompt,
+        status: node.aiResponseStatus,
+        isRevision: node.revisionOfNodeId !== undefined,
+        noteCount: noteCounts.get(node._id) ?? 0,
+        selected: node._id === selectedNodeId,
+        onPath: pathIds.has(node._id),
         onAddNote: () => onAddNote?.(node._id),
         onDeleteNode: () => onDeleteNode?.(node._id),
-      },
-    };
-  });
+      } satisfies CustomNodeData,
+    }));
 
-  // Create edges
-  const edges: Edge[] = dbNodes
-    .filter((node) => node.parentNodeId)
-    .map((node) => {
-      const isInPath =
-        currentPath.some((n) => n._id === node._id) &&
-        currentPath.some((n) => n._id === node.parentNodeId);
+    const flowEdges: Edge[] = dbNodes
+      .filter((node) => node.parentNodeId)
+      .map((node) => {
+        const onPath = pathIds.has(node._id) && pathIds.has(node.parentNodeId!);
+        return {
+          id: `e-${node.parentNodeId}-${node._id}`,
+          source: node.parentNodeId!,
+          target: node._id,
+          animated: onPath && node.aiResponseStatus === "streaming",
+          style: {
+            stroke: onPath ? "#10b981" : "#cbd5e1",
+            strokeWidth: onPath ? 3 : 2,
+          },
+        };
+      });
 
-      return {
-        id: `e-${node.parentNodeId}-${node._id}`,
-        source: String(node.parentNodeId),
-        target: String(node._id),
-        animated: isInPath,
-        style: {
-          stroke: '#ef4444',
-          strokeWidth: isInPath ? 4 : 3,
-        },
-      };
-    });
-
-  console.log("Graph rendering:", {
-    dbNodes: dbNodes.length,
-    nodes: nodes.length,
-    edges: edges.length,
-    sampleNode: nodes[0],
-    sampleEdge: edges[0],
-  });
+    return { nodes: flowNodes, edges: flowEdges };
+  }, [
+    dbNodes,
+    currentPath,
+    selectedNodeId,
+    noteCounts,
+    onAddNote,
+    onDeleteNode,
+  ]);
 
   return (
-    <div className="w-full h-full">
+    <div className="h-full w-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodeClick={(_, node) => onNodeClick(node.id as Id<"nodes">)}
-        nodesDraggable={true}
+        onNodeDragStop={(_, node) =>
+          onMoveNode?.(node.id as Id<"nodes">, node.position.x, node.position.y)
+        }
+        nodesDraggable
         fitView
         minZoom={0.1}
         maxZoom={2}
+        proOptions={{ hideAttribution: false }}
       >
         <Background color="#cbd5e1" gap={16} />
         <Controls />

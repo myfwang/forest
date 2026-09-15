@@ -1,58 +1,56 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireOwnedNode, requireOwnedTree, requireUserId } from "./lib";
 
-// Get all notes for a tree
+/**
+ * All notes in a tree, newest first.
+ */
 export const getNotesForTree = query({
-  args: {
-    treeId: v.id("trees"),
-  },
+  args: { treeId: v.id("trees") },
   handler: async (ctx, { treeId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
+    await requireOwnedTree(ctx, treeId, userId);
 
-    const notes = await ctx.db
+    return await ctx.db
       .query("notes")
       .withIndex("by_tree", (q) => q.eq("treeId", treeId))
       .filter((q) => q.eq(q.field("userId"), userId))
       .order("desc")
       .collect();
-
-    return notes;
   },
 });
 
-// Create a new note
+export const getNotesForNode = query({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, { nodeId }) => {
+    const userId = await requireUserId(ctx);
+    await requireOwnedNode(ctx, nodeId, userId);
+
+    return await ctx.db
+      .query("notes")
+      .withIndex("by_node", (q) => q.eq("nodeId", nodeId))
+      .collect();
+  },
+});
+
 export const createNote = mutation({
   args: {
     nodeId: v.id("nodes"),
     content: v.string(),
   },
   handler: async (ctx, { nodeId, content }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, nodeId, userId);
 
-    // Get the node to find the treeId
-    const node = await ctx.db.get(nodeId);
-    if (!node) {
-      throw new Error("Node not found");
-    }
-
-    // Verify user owns this node
-    if (node.userId !== userId) {
-      throw new Error("Unauthorized");
-    }
+    const trimmed = content.trim();
+    if (trimmed.length === 0) throw new Error("Note cannot be empty");
 
     const now = Date.now();
     const noteId = await ctx.db.insert("notes", {
       userId,
       treeId: node.treeId,
       nodeId,
-      content,
+      content: trimmed,
       createdAt: now,
       updatedAt: now,
     });
@@ -61,57 +59,33 @@ export const createNote = mutation({
   },
 });
 
-// Update a note
 export const updateNote = mutation({
   args: {
     noteId: v.id("notes"),
     content: v.string(),
   },
   handler: async (ctx, { noteId, content }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
 
     const note = await ctx.db.get(noteId);
-    if (!note) {
-      throw new Error("Note not found");
-    }
+    if (!note || note.userId !== userId) throw new Error("Note not found");
 
-    // Verify user owns this note
-    if (note.userId !== userId) {
-      throw new Error("Unauthorized");
-    }
+    const trimmed = content.trim();
+    if (trimmed.length === 0) throw new Error("Note cannot be empty");
 
-    await ctx.db.patch(noteId, {
-      content,
-      updatedAt: Date.now(),
-    });
+    await ctx.db.patch(noteId, { content: trimmed, updatedAt: Date.now() });
 
     return { success: true };
   },
 });
 
-// Delete a note
 export const deleteNote = mutation({
-  args: {
-    noteId: v.id("notes"),
-  },
+  args: { noteId: v.id("notes") },
   handler: async (ctx, { noteId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireUserId(ctx);
 
     const note = await ctx.db.get(noteId);
-    if (!note) {
-      throw new Error("Note not found");
-    }
-
-    // Verify user owns this note
-    if (note.userId !== userId) {
-      throw new Error("Unauthorized");
-    }
+    if (!note || note.userId !== userId) throw new Error("Note not found");
 
     await ctx.db.delete(noteId);
 
