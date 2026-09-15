@@ -239,13 +239,13 @@ export function ConversationView({
                     </p>
                     <button
                       onClick={() => onEditNote(note)}
-                      className="text-xs text-amber-700 dark:text-amber-300 opacity-0 group-hover:opacity-100"
+                      className="text-xs text-amber-700 dark:text-amber-300 opacity-60 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => onDeleteNote(note._id)}
-                      className="text-xs text-red-600 dark:text-red-400 opacity-0 group-hover:opacity-100"
+                      className="text-xs text-red-600 dark:text-red-400 opacity-60 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       Delete
                     </button>

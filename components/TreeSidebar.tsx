@@ -231,7 +231,7 @@ function TreeRow({
         </button>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
-          className="flex-shrink-0 px-1 text-slate-500 opacity-0 transition-opacity hover:text-slate-200 group-hover:opacity-100"
+          className="flex-shrink-0 px-1 text-slate-500 opacity-60 transition-opacity hover:text-slate-200 focus-visible:opacity-100 group-hover:opacity-100"
           title="Conversation options"
         >
           ⋮
