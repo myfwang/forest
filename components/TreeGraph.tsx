@@ -1,18 +1,20 @@
 "use client";
 
 import {
+  applyNodeChanges,
   Background,
   Controls,
   Edge,
   Handle,
   Node,
+  NodeChange,
   NodeProps,
   Position,
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Id } from "@/convex/_generated/dataModel";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { childrenByParent, NodeDoc, rootNodes } from "@/lib/tree";
 
 interface TreeGraphProps {
@@ -241,11 +243,27 @@ export function TreeGraph({
     onDeleteNode,
   ]);
 
+  // React Flow owns node positions while a drag is in flight, so mirror the
+  // derived nodes into state and re-seed it whenever the backend data changes.
+  const [flowNodes, setFlowNodes] = useState(nodes);
+  const [seed, setSeed] = useState(nodes);
+  if (seed !== nodes) {
+    setSeed(nodes);
+    setFlowNodes(nodes);
+  }
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) =>
+      setFlowNodes((current) => applyNodeChanges(changes, current)),
+    [],
+  );
+
   return (
     <div className="h-full w-full">
       <ReactFlow
-        nodes={nodes}
+        nodes={flowNodes}
         edges={edges}
+        onNodesChange={onNodesChange}
         nodeTypes={nodeTypes}
         onNodeClick={(_, node) => onNodeClick(node.id as Id<"nodes">)}
         onNodeDragStop={(_, node) =>
