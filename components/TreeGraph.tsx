@@ -37,6 +37,8 @@ type CustomNodeData = {
   onDeleteNode?: () => void;
 };
 
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 104;
 const HORIZONTAL_SPACING = 280;
 const VERTICAL_SPACING = 170;
 
@@ -59,11 +61,11 @@ function CustomNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`relative w-[220px] rounded-lg border-2 bg-white dark:bg-slate-800 p-3 text-[13px] shadow-sm ${border}`}
+      className={`relative flex h-[104px] w-[220px] flex-col justify-between overflow-hidden rounded-lg border-2 bg-white p-3 text-[13px] shadow-sm dark:bg-slate-800 ${border}`}
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-400" />
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 break-words text-slate-800 dark:text-slate-100">
+        <div className="line-clamp-3 min-w-0 flex-1 break-words text-slate-800 dark:text-slate-100">
           {nodeData.label}
         </div>
         <div className="relative flex-shrink-0">
@@ -116,7 +118,7 @@ function CustomNode({ data }: NodeProps) {
         </div>
       </div>
 
-      <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
         <span>{STATUS_LABEL[nodeData.status]}</span>
         {nodeData.isRevision && <span title="Revision of a sibling">✎</span>}
         {nodeData.noteCount > 0 && <span>🗒 {nodeData.noteCount}</span>}
@@ -190,6 +192,10 @@ export function TreeGraph({
     const flowNodes: Node[] = dbNodes.map((node) => ({
       id: node._id,
       type: "custom",
+      // Declared so React Flow can fit the view before the DOM is measured;
+      // without it a freshly added node makes the viewport transform NaN.
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
       position:
         node.positionX !== undefined && node.positionY !== undefined
           ? { x: node.positionX, y: node.positionY }
@@ -247,6 +253,7 @@ export function TreeGraph({
         }
         nodesDraggable
         fitView
+        fitViewOptions={{ padding: 0.2, minZoom: 0.2, maxZoom: 1.2 }}
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: false }}
