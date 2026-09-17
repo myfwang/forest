@@ -105,7 +105,6 @@ export function ForestScene({ patches }: Props) {
     const camera = new THREE.OrthographicCamera();
     camera.position.set(16, 22, 16);
     camera.lookAt(0, 0, 0);
-    camera.zoom = 26;
 
     scene.add(new THREE.AmbientLight(0xffffff, dark ? 0.7 : 1.1));
     const sun = new THREE.DirectionalLight(0xfff3d6, dark ? 1.2 : 1.6);
@@ -177,6 +176,15 @@ export function ForestScene({ patches }: Props) {
       });
     });
 
+    const extentX = Math.max(
+      ...layouts.map((l) => Math.abs(l.origin.x) + l.radius),
+      8,
+    );
+    const extentZ = Math.max(
+      ...layouts.map((l) => Math.abs(l.origin.z) + l.radius),
+      8,
+    );
+
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let hoveredGroup: THREE.Group | null = null;
@@ -204,11 +212,14 @@ export function ForestScene({ patches }: Props) {
       const { clientWidth: w, clientHeight: h } = mount!;
       renderer.setSize(w, h);
       const aspect = w / h;
-      const span = 26;
-      camera.left = (-span * aspect) / 2;
-      camera.right = (span * aspect) / 2;
-      camera.top = span / 2;
-      camera.bottom = -span / 2;
+      const halfHeight = Math.max(
+        extentZ + 2.5,
+        (extentX + 2.5) / aspect,
+      );
+      camera.left = -halfHeight * aspect;
+      camera.right = halfHeight * aspect;
+      camera.top = halfHeight;
+      camera.bottom = -halfHeight;
       camera.updateProjectionMatrix();
       updateLabels();
     }
