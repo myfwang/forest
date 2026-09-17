@@ -13,26 +13,28 @@ Status as of the branching + gardens + notes work.
   the node through an internal query that intentionally skips auth, so any
   signed-in user could trigger generation on — and read the answer of — another
   user's node. It now verifies the caller owns the node.
+- **Nodes could get stuck in `streaming`.** Every write from the streaming loop
+  now stamps `generationUpdatedAt` on the node. The conversation view treats a
+  `pending`/`streaming` node with no write for 30s as stalled and shows a
+  "Retry generation" button that re-runs `ai.generateResponse` on the same
+  node.
+- **No cancel for an in-flight generation.** `nodes.cancelGeneration` sets
+  `cancelRequested`; the streaming loop checks it on every flush, aborts the
+  OpenAI stream and stores the partial text with status `cancelled`.
+- **Streaming only flushed every 10 chunks.** Partial output is now also flushed
+  when 500ms have passed since the last write, so early tokens show up.
 
 ## Open
 
-1. **Nodes can get stuck in `streaming`.** If the action dies mid-stream (reload,
-   deploy, OpenAI error outside the try block) the node keeps `streaming` forever
-   with no retry affordance. Needs a stale-generation timeout and a "retry"
-   button on the node.
-2. **No cancel for an in-flight generation.** Long answers cannot be stopped.
-3. **Streaming writes every 10 chunks and never flushes the tail early**, so the
-   last partial chunk only lands with the `complete` write; short answers can
-   look frozen.
-4. **Manual node positions are never reset.** Once dragged, a node keeps its
+1. **Manual node positions are never reset.** Once dragged, a node keeps its
    saved position even after new siblings shift the layout, causing overlaps.
    Needs an "auto-arrange" action.
-5. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
+2. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
    the tree delete path does the same for every node in the tree.
-6. **No optimistic UI for branch creation.** The new node only appears after the
+3. **No optimistic UI for branch creation.** The new node only appears after the
    mutation round-trips, which reads as lag on slow connections.
-7. **Garden auto-assignment runs only for root nodes** and can create
+4. **Garden auto-assignment runs only for root nodes** and can create
    near-duplicate garden names ("React", "React Basics") because matching is
    done by the model, not by normalised comparison.
-8. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
+5. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
    focus or ARIA roles. The notes panel folder controls need labels.

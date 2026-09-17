@@ -9,6 +9,11 @@ const MISSING_KEY_MESSAGE =
 
 const TOPIC_MODEL = "gpt-4o-mini";
 
+// Partial output is persisted after this many chunks or this much time,
+// whichever comes first, so short answers show up before they finish.
+const FLUSH_EVERY_CHUNKS = 10;
+const FLUSH_EVERY_MS = 500;
+
 function openAIClient(): OpenAI | null {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -70,19 +75,41 @@ export const generateResponse = action({
       });
 
       let fullResponse = "";
-      let chunkCount = 0;
+      let chunksSinceFlush = 0;
+      let lastFlushAt = Date.now();
 
       for await (const chunk of stream) {
         fullResponse += chunk.choices[0]?.delta?.content ?? "";
-        chunkCount++;
+        chunksSinceFlush++;
 
-        if (chunkCount % 10 === 0) {
+        const now = Date.now();
+        if (
+          chunksSinceFlush < FLUSH_EVERY_CHUNKS &&
+          now - lastFlushAt < FLUSH_EVERY_MS
+        ) {
+          continue;
+        }
+
+        const cancelled = await ctx.runQuery(internal.nodes.isCancelRequested, {
+          nodeId: args.nodeId,
+        });
+        if (cancelled) {
+          stream.controller.abort();
           await ctx.runMutation(internal.nodes.updateNodeResponse, {
             nodeId: args.nodeId,
             aiResponse: fullResponse,
-            status: "streaming",
+            status: "cancelled",
           });
+          return { success: false, error: "Generation cancelled" };
         }
+
+        await ctx.runMutation(internal.nodes.updateNodeResponse, {
+          nodeId: args.nodeId,
+          aiResponse: fullResponse,
+          status: "streaming",
+        });
+        chunksSinceFlush = 0;
+        lastFlushAt = now;
       }
 
       await ctx.runMutation(internal.nodes.updateNodeResponse, {
