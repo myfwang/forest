@@ -329,6 +329,10 @@ export function TreeGraph({
         // without it a freshly added node makes the viewport transform NaN.
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
+        // Nodes are a fixed size, so report them as already measured: React Flow
+        // drops the handle bounds of any node object it sees without `measured`,
+        // and edges cannot be drawn until those bounds are measured again.
+        measured: { width: NODE_WIDTH, height: NODE_HEIGHT },
         position:
           node.positionX !== undefined && node.positionY !== undefined
             ? { x: node.positionX, y: node.positionY }
