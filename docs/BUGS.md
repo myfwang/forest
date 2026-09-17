@@ -13,7 +13,7 @@ Status as of the branching + gardens + notes work.
   the node through an internal query that intentionally skips auth, so any
   signed-in user could trigger generation on — and read the answer of — another
   user's node. It now verifies the caller owns the node.
-- **Accessibility pass (was Open #7).** Graph nodes now expose
+- **Accessibility pass (was Open #4).** Graph nodes now expose
   `role="button"`, `aria-pressed` and a descriptive `aria-label`
   (prompt, status, revision flag, note count) via React Flow's `ariaRole` /
   `ariaLabel` / `domAttributes`; Enter/Space selects a node because
