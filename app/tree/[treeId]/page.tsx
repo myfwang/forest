@@ -3,13 +3,21 @@
 import { useAction, useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
-import { useEffect, useMemo, useState, use } from "react";
+import { useEffect, useMemo, useRef, useState, use } from "react";
 import { TreeSidebar } from "@/components/TreeSidebar";
 import { TreeGraph } from "@/components/TreeGraph";
 import { NoteModal } from "@/components/NoteModal";
 import { NotesPanel } from "@/components/NotesPanel";
 import { ConversationView } from "@/components/ConversationView";
-import { latestLeaf, pathToNode } from "@/lib/tree";
+import {
+  byId,
+  childrenByParent,
+  latestLeaf,
+  pathToNode,
+  siblingsOf,
+} from "@/lib/tree";
+import { isTypingTarget } from "@/lib/keyboard";
+import { CommandItem } from "@/components/CommandPalette";
 import { useRouter } from "next/navigation";
 
 export default function TreePage({
@@ -59,6 +67,7 @@ export default function TreePage({
     nodeId: Id<"nodes">;
     note?: Doc<"notes">;
   } | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.push("/signin");
@@ -80,6 +89,40 @@ export default function TreePage({
     [nodes, selectedNodeId],
   );
 
+  // j/k step across siblings, h goes to the parent, l to the first child.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (!selectedNodeId) return;
+      const current = byId(nodes).get(selectedNodeId);
+      if (!current) return;
+
+      let next: Id<"nodes"> | undefined;
+      switch (e.key) {
+        case "j":
+        case "k": {
+          const siblings = siblingsOf(nodes, current);
+          const index = siblings.findIndex((n) => n._id === current._id);
+          next = siblings[index + (e.key === "j" ? 1 : -1)]?._id;
+          break;
+        }
+        case "h":
+          next = current.parentNodeId;
+          break;
+        case "l":
+          next = childrenByParent(nodes).get(current._id)?.[0]?._id;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+      if (next) setSelectedNodeId(next);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [nodes, selectedNodeId]);
+
   const noteCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const note of notes ?? []) {
@@ -87,6 +130,63 @@ export default function TreePage({
     }
     return counts;
   }, [notes]);
+
+  const commands = useMemo<CommandItem[]>(() => {
+    const tree = data?.tree;
+    if (!tree) return [];
+    const lookup = byId(nodes);
+    const actions: CommandItem[] = [
+      {
+        id: "action-branch",
+        group: "Actions",
+        label: "New branch from selected prompt",
+        hint: selectedNodeId
+          ? lookup.get(selectedNodeId)?.userPrompt
+          : undefined,
+        run: () => promptRef.current?.focus(),
+      },
+      {
+        id: "action-toggle-map",
+        group: "Actions",
+        label: showMap ? "Hide map" : "Show map",
+        run: () => setShowMap((value) => !value),
+      },
+      {
+        id: "action-toggle-notes",
+        group: "Actions",
+        label: showNotes ? "Hide notes panel" : "Show notes panel",
+        run: () => setShowNotes((value) => !value),
+      },
+      {
+        id: "action-rename",
+        group: "Actions",
+        label: "Rename tree",
+        hint: tree.title,
+        run: () => {
+          setEditedTitle(tree.title);
+          setIsEditingTitle(true);
+        },
+      },
+    ];
+    const nodeItems: CommandItem[] = nodes.map((node) => ({
+      id: `node-${node._id}`,
+      group: "Prompts in this tree",
+      label: node.userPrompt,
+      hint: node._id === selectedNodeId ? "selected" : undefined,
+      run: () => setSelectedNodeId(node._id),
+    }));
+    const noteItems: CommandItem[] = (notes ?? []).map((note) => ({
+      id: `note-${note._id}`,
+      group: "Notes",
+      label: note.content,
+      hint: note.folder ?? lookup.get(note.nodeId)?.userPrompt,
+      run: () => {
+        setSelectedNodeId(note.nodeId);
+        setNoteTarget({ nodeId: note.nodeId, note });
+      },
+    }));
+    return [...actions, ...nodeItems, ...noteItems];
+  }, [data?.tree, nodes, notes, selectedNodeId, showMap, showNotes]);
 
   if (isLoading) {
     return (
@@ -200,7 +300,7 @@ export default function TreePage({
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-900">
-      <TreeSidebar />
+      <TreeSidebar commands={commands} />
 
       <div className="flex min-w-0 flex-1 flex-col bg-white dark:bg-slate-900">
         <div className="flex items-center gap-3 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
@@ -301,6 +401,7 @@ export default function TreePage({
 
             <div className="border-t border-slate-200 p-4 dark:border-slate-800">
               <textarea
+                ref={promptRef}
                 value={branchPrompt}
                 onChange={(e) => setBranchPrompt(e.target.value)}
                 onKeyDown={(e) => {
@@ -321,7 +422,12 @@ export default function TreePage({
               <div className="mt-2 flex items-center justify-between">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Only the highlighted path is sent to the model — earlier
-                  branches stay out of context.
+                  branches stay out of context.{" "}
+                  <span className="whitespace-nowrap">
+                    <kbd className="font-mono">⌘K</kbd> jump ·{" "}
+                    <kbd className="font-mono">j/k</kbd> siblings ·{" "}
+                    <kbd className="font-mono">h/l</kbd> parent/child
+                  </span>
                 </p>
                 <button
                   onClick={() => void handleBranch()}

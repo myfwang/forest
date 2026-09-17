@@ -22,9 +22,10 @@ UI.
 
 ## 2. Productivity
 
-- **Command palette** (`⌘K`): jump to tree, node, note or garden; create a branch;
-  toggle map/notes. Keyboard-first navigation of the tree (`j/k` siblings,
-  `h/l` parent/child).
+- **Command palette** (shipped, `⌘K` / `Ctrl+K`): jump to tree, node, note or
+  garden; new branch from the selected prompt; toggle map/notes; rename tree.
+  Keyboard-first navigation of the tree (`j/k` siblings, `h/l` parent/child)
+  is shipped too and stays out of the way while typing.
 - **Compare branches side by side.** Pick two sibling branches and diff their
   answers — the core reason to branch at all is to compare approaches.
 - **Branch templates / prompt snippets.** Saved prompts ("critique this",
@@ -65,7 +66,7 @@ UI.
 
 ## Suggested order
 
-1. Command palette + keyboard nav (cheap, compounding).
+1. ~~Command palette + keyboard nav~~ (shipped).
 2. Summarise subtree + collapse subtrees (makes big trees usable).
 3. Notes → flashcards + branch quizzes (the learning differentiator).
 4. Compare branches side by side.
