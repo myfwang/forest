@@ -142,7 +142,7 @@ export function CommandPalette({ items, onClose }: CommandPaletteProps) {
             setQuery(e.target.value);
             setActiveIndex(0);
           }}
-          placeholder="Jump to a tree, garden, prompt or note, or run an action…"
+          placeholder="Jump to a tree, forest, prompt or note, or run an action…"
           className="border-b border-slate-200 bg-transparent px-4 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
         />
 
