@@ -9,6 +9,7 @@ import {
   Node,
   NodeChange,
   NodeProps,
+  Panel,
   Position,
   ReactFlow,
 } from "@xyflow/react";
@@ -26,6 +27,7 @@ interface TreeGraphProps {
   onAddNote?: (nodeId: Id<"nodes">) => void;
   onDeleteNode?: (nodeId: Id<"nodes">) => void;
   onMoveNode?: (nodeId: Id<"nodes">, x: number, y: number) => void;
+  onAutoArrange?: () => void;
 }
 
 type CustomNodeData = {
@@ -35,6 +37,9 @@ type CustomNodeData = {
   noteCount: number;
   selected: boolean;
   onPath: boolean;
+  childCount: number;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onAddNote?: () => void;
   onDeleteNode?: () => void;
 };
@@ -166,13 +171,36 @@ function CustomNode({ data }: NodeProps) {
         </div>
       </div>
 
-      <div
-        className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"
-        aria-hidden="true"
-      >
-        <span>{STATUS_LABEL[nodeData.status]}</span>
-        {nodeData.isRevision && <span title="Revision of a sibling">✎</span>}
-        {nodeData.noteCount > 0 && <span>🗒 {nodeData.noteCount}</span>}
+      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <span aria-hidden="true">{STATUS_LABEL[nodeData.status]}</span>
+        {nodeData.isRevision && (
+          <span title="Revision of a sibling" aria-hidden="true">
+            ✎
+          </span>
+        )}
+        {nodeData.noteCount > 0 && (
+          <span aria-hidden="true">🗒 {nodeData.noteCount}</span>
+        )}
+        {nodeData.childCount > 0 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              nodeData.onToggleCollapse();
+            }}
+            className="nodrag ml-auto rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            aria-expanded={!nodeData.collapsed}
+            aria-label={
+              nodeData.collapsed
+                ? `Expand ${nodeData.childCount} branches`
+                : `Collapse ${nodeData.childCount} branches`
+            }
+          >
+            <span aria-hidden="true">
+              {nodeData.collapsed ? "▸" : "▾"} {nodeData.childCount}
+            </span>
+          </button>
+        )}
       </div>
       <Handle
         type="source"
@@ -184,6 +212,27 @@ function CustomNode({ data }: NodeProps) {
 }
 
 const nodeTypes = { custom: CustomNode };
+
+/**
+ * Drop every descendant of a collapsed node, keeping the collapsed node itself.
+ */
+function visibleNodes(
+  dbNodes: NodeDoc[],
+  collapsed: Set<Id<"nodes">>,
+): NodeDoc[] {
+  if (collapsed.size === 0) return dbNodes;
+  const children = childrenByParent(dbNodes);
+  const visible = new Set<Id<"nodes">>();
+
+  const visit = (node: NodeDoc) => {
+    visible.add(node._id);
+    if (collapsed.has(node._id)) return;
+    for (const kid of children.get(node._id) ?? []) visit(kid);
+  };
+  for (const root of rootNodes(dbNodes)) visit(root);
+
+  return dbNodes.filter((node) => visible.has(node._id));
+}
 
 /**
  * Lay the forest out top-down, giving every leaf its own column and centring
@@ -235,12 +284,24 @@ export function TreeGraph({
   onAddNote,
   onDeleteNode,
   onMoveNode,
+  onAutoArrange,
 }: TreeGraphProps) {
+  const [collapsed, setCollapsed] = useState<Set<Id<"nodes">>>(new Set());
+  const toggleCollapse = useCallback((nodeId: Id<"nodes">) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
+
   const { nodes, edges } = useMemo(() => {
-    const positions = layout(dbNodes);
+    const shownNodes = visibleNodes(dbNodes, collapsed);
+    const positions = layout(shownNodes);
     const pathIds = new Set(currentPath.map((node) => node._id));
 
-    const flowNodes: Node[] = dbNodes.map((node) => {
+    const flowNodes: Node[] = shownNodes.map((node) => {
       const data: CustomNodeData = {
         label:
           node.userPrompt.length > 90
@@ -251,6 +312,9 @@ export function TreeGraph({
         noteCount: noteCounts.get(node._id) ?? 0,
         selected: node._id === selectedNodeId,
         onPath: pathIds.has(node._id),
+        childCount: node.childCount,
+        collapsed: collapsed.has(node._id),
+        onToggleCollapse: () => toggleCollapse(node._id),
         onAddNote: () => onAddNote?.(node._id),
         onDeleteNode: () => onDeleteNode?.(node._id),
       };
@@ -272,7 +336,7 @@ export function TreeGraph({
       };
     });
 
-    const flowEdges: Edge[] = dbNodes
+    const flowEdges: Edge[] = shownNodes
       .filter((node) => node.parentNodeId)
       .map((node) => {
         const onPath = pathIds.has(node._id) && pathIds.has(node.parentNodeId!);
@@ -291,6 +355,8 @@ export function TreeGraph({
     return { nodes: flowNodes, edges: flowEdges };
   }, [
     dbNodes,
+    collapsed,
+    toggleCollapse,
     currentPath,
     selectedNodeId,
     noteCounts,
@@ -341,6 +407,18 @@ export function TreeGraph({
       >
         <Background color="#cbd5e1" gap={16} />
         <Controls />
+        {onAutoArrange && (
+          <Panel position="top-right">
+            <button
+              type="button"
+              onClick={onAutoArrange}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              title="Forget dragged positions and lay the tree out again"
+            >
+              Auto-arrange
+            </button>
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );

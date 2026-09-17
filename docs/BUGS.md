@@ -13,7 +13,7 @@ Status as of the branching + gardens + notes work.
   the node through an internal query that intentionally skips auth, so any
   signed-in user could trigger generation on — and read the answer of — another
   user's node. It now verifies the caller owns the node.
-- **Accessibility pass (was Open #8).** Graph nodes now expose
+- **Accessibility pass (was Open #7).** Graph nodes now expose
   `role="button"`, `aria-pressed` and a descriptive `aria-label`
   (prompt, status, revision flag, note count) via React Flow's `ariaRole` /
   `ariaLabel` / `domAttributes`; Enter/Space selects a node because
@@ -36,6 +36,12 @@ Status as of the branching + gardens + notes work.
   and white text on `bg-emerald-600` (≈3.3:1) — were moved to `slate-500`
   and `bg-emerald-700` in the touched components; placeholder colour was
   lifted to `slate-500` in light mode.
+- **Manual node positions were never reset.** Once dragged, a node kept its
+  saved position even after new siblings shifted the layout, causing overlaps.
+  Fixed by an "Auto-arrange" button on the graph (`nodes.resetNodePositions`)
+  that clears every saved position in the tree so the computed layout takes
+  over. Subtrees can also be collapsed/expanded from a child-count badge
+  (client-side only) to keep large trees readable.
 
 ## Open
 
@@ -47,17 +53,14 @@ Status as of the branching + gardens + notes work.
 3. **Streaming writes every 10 chunks and never flushes the tail early**, so the
    last partial chunk only lands with the `complete` write; short answers can
    look frozen.
-4. **Manual node positions are never reset.** Once dragged, a node keeps its
-   saved position even after new siblings shift the layout, causing overlaps.
-   Needs an "auto-arrange" action.
-5. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
+4. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
    the tree delete path does the same for every node in the tree.
-6. **No optimistic UI for branch creation.** The new node only appears after the
+5. **No optimistic UI for branch creation.** The new node only appears after the
    mutation round-trips, which reads as lag on slow connections.
-7. **Garden auto-assignment runs only for root nodes** and can create
+6. **Garden auto-assignment runs only for root nodes** and can create
    near-duplicate garden names ("React", "React Basics") because matching is
    done by the model, not by normalised comparison.
-8. **Accessibility follow-ups.** The `⋮` menu button lives inside the
+7. **Accessibility follow-ups.** The `⋮` menu button lives inside the
    `role="button"` graph node wrapper (nested interactive control) because
    React Flow owns the focusable wrapper; a future pass could move node actions
    into a toolbar outside the node. `NotesPanel` still renames folders through
