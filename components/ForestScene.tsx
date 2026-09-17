@@ -85,13 +85,23 @@ export function ForestScene({ patches }: Props) {
   const [labels, setLabels] = useState<
     { name: string; url: string; x: number; y: number }[]
   >([]);
+  const [dark, setDark] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
 
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => setDark(e.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
 
-    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(dark ? "#0f172a" : "#e0f2e9");
     scene.fog = new THREE.Fog(dark ? "#0f172a" : "#e0f2e9", 30, 70);
@@ -221,6 +231,7 @@ export function ForestScene({ patches }: Props) {
       camera.top = halfHeight;
       camera.bottom = -halfHeight;
       camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
       updateLabels();
     }
     resize();
@@ -301,7 +312,7 @@ export function ForestScene({ patches }: Props) {
         }
       });
     };
-  }, [patches, router]);
+  }, [patches, router, dark]);
 
   return (
     <div className="relative">
