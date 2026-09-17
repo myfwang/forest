@@ -15,7 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Id } from "@/convex/_generated/dataModel";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { childrenByParent, NodeDoc, rootNodes } from "@/lib/tree";
 
 interface TreeGraphProps {
@@ -57,9 +57,29 @@ const STATUS_LABEL: Record<NodeDoc["aiResponseStatus"], string> = {
   cancelled: "stopped",
 };
 
+function nodeAriaLabel(data: CustomNodeData) {
+  const parts = [`Prompt: ${data.label}`, STATUS_LABEL[data.status]];
+  if (data.isRevision) parts.push("revision of a sibling");
+  if (data.noteCount > 0) {
+    parts.push(`${data.noteCount} ${data.noteCount === 1 ? "note" : "notes"}`);
+  }
+  return parts.join(", ");
+}
+
 function CustomNode({ data }: NodeProps) {
   const nodeData = data as CustomNodeData;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (menuOpen) firstItemRef.current?.focus();
+  }, [menuOpen]);
+
+  const closeMenu = (restoreFocus: boolean) => {
+    setMenuOpen(false);
+    if (restoreFocus) menuButtonRef.current?.focus();
+  };
 
   const border = nodeData.selected
     ? "border-emerald-500"
@@ -73,19 +93,32 @@ function CustomNode({ data }: NodeProps) {
     >
       <Handle type="target" position={Position.Top} className="!bg-slate-400" />
       <div className="flex items-start justify-between gap-2">
-        <div className="line-clamp-3 min-w-0 flex-1 break-words text-slate-800 dark:text-slate-100">
+        <div
+          className="line-clamp-3 min-w-0 flex-1 break-words text-slate-800 dark:text-slate-100"
+          aria-hidden="true"
+        >
           {nodeData.label}
         </div>
         <div className="relative flex-shrink-0">
           <button
+            ref={menuButtonRef}
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen(!menuOpen);
             }}
-            className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-lg font-bold leading-none text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-            title="Prompt options"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && menuOpen) {
+                e.stopPropagation();
+                closeMenu(true);
+              }
+            }}
+            className="nodrag flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-lg font-bold leading-none text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            aria-label="Prompt options"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
           >
-            ⋮
+            <span aria-hidden="true">⋮</span>
           </button>
           {menuOpen && (
             <>
@@ -97,26 +130,39 @@ function CustomNode({ data }: NodeProps) {
                 }}
               />
               <div
-                className="absolute right-0 top-8 z-20 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+                role="menu"
+                aria-label="Prompt options"
+                className="nodrag absolute right-0 top-8 z-20 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800"
                 onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    closeMenu(true);
+                  }
+                }}
               >
                 <button
+                  ref={firstItemRef}
+                  type="button"
+                  role="menuitem"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    closeMenu(false);
                     nodeData.onAddNote?.();
                   }}
-                  className="w-full px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                  className="w-full px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 dark:text-slate-300 dark:hover:bg-slate-700 dark:focus-visible:bg-slate-700"
                 >
                   Add note
                 </button>
                 <button
+                  type="button"
+                  role="menuitem"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setMenuOpen(false);
+                    closeMenu(false);
                     nodeData.onDeleteNode?.();
                   }}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 focus:outline-none focus-visible:bg-red-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 dark:text-red-400 dark:hover:bg-red-900/20 dark:focus-visible:bg-red-900/20"
                 >
                   Delete branch
                 </button>
@@ -127,23 +173,33 @@ function CustomNode({ data }: NodeProps) {
       </div>
 
       <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-        <span>{STATUS_LABEL[nodeData.status]}</span>
-        {nodeData.isRevision && <span title="Revision of a sibling">✎</span>}
-        {nodeData.noteCount > 0 && <span>🗒 {nodeData.noteCount}</span>}
+        <span aria-hidden="true">{STATUS_LABEL[nodeData.status]}</span>
+        {nodeData.isRevision && (
+          <span title="Revision of a sibling" aria-hidden="true">
+            ✎
+          </span>
+        )}
+        {nodeData.noteCount > 0 && (
+          <span aria-hidden="true">🗒 {nodeData.noteCount}</span>
+        )}
         {nodeData.childCount > 0 && (
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               nodeData.onToggleCollapse();
             }}
-            className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-            title={
+            className="nodrag ml-auto rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            aria-expanded={!nodeData.collapsed}
+            aria-label={
               nodeData.collapsed
                 ? `Expand ${nodeData.childCount} branches`
                 : `Collapse ${nodeData.childCount} branches`
             }
           >
-            {nodeData.collapsed ? "▸" : "▾"} {nodeData.childCount}
+            <span aria-hidden="true">
+              {nodeData.collapsed ? "▸" : "▾"} {nodeData.childCount}
+            </span>
           </button>
         )}
       </div>
@@ -246,18 +302,8 @@ export function TreeGraph({
     const positions = layout(shownNodes);
     const pathIds = new Set(currentPath.map((node) => node._id));
 
-    const flowNodes: Node[] = shownNodes.map((node) => ({
-      id: node._id,
-      type: "custom",
-      // Declared so React Flow can fit the view before the DOM is measured;
-      // without it a freshly added node makes the viewport transform NaN.
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-      position:
-        node.positionX !== undefined && node.positionY !== undefined
-          ? { x: node.positionX, y: node.positionY }
-          : (positions.get(node._id) ?? { x: 0, y: 0 }),
-      data: {
+    const flowNodes: Node[] = shownNodes.map((node) => {
+      const data: CustomNodeData = {
         label:
           node.userPrompt.length > 90
             ? `${node.userPrompt.slice(0, 90)}…`
@@ -272,8 +318,24 @@ export function TreeGraph({
         onToggleCollapse: () => toggleCollapse(node._id),
         onAddNote: () => onAddNote?.(node._id),
         onDeleteNode: () => onDeleteNode?.(node._id),
-      } satisfies CustomNodeData,
-    }));
+      };
+      return {
+        id: node._id,
+        type: "custom",
+        ariaRole: "button",
+        ariaLabel: nodeAriaLabel(data),
+        domAttributes: { "aria-pressed": data.selected },
+        // Declared so React Flow can fit the view before the DOM is measured;
+        // without it a freshly added node makes the viewport transform NaN.
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        position:
+          node.positionX !== undefined && node.positionY !== undefined
+            ? { x: node.positionX, y: node.positionY }
+            : (positions.get(node._id) ?? { x: 0, y: 0 }),
+        data,
+      };
+    });
 
     const flowEdges: Edge[] = shownNodes
       .filter((node) => node.parentNodeId)
@@ -312,14 +374,22 @@ export function TreeGraph({
     setFlowNodes(nodes);
   }
 
+  // Keyboard users select a node with Enter/Space, which React Flow reports
+  // as a `select` change rather than a click.
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setFlowNodes((current) => applyNodeChanges(changes, current)),
-    [],
+    (changes: NodeChange[]) => {
+      setFlowNodes((current) => applyNodeChanges(changes, current));
+      for (const change of changes) {
+        if (change.type === "select" && change.selected) {
+          onNodeClick(change.id as Id<"nodes">);
+        }
+      }
+    },
+    [onNodeClick],
   );
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full" role="region" aria-label="Conversation map">
       <ReactFlow
         nodes={flowNodes}
         edges={edges}
@@ -341,8 +411,9 @@ export function TreeGraph({
         {onAutoArrange && (
           <Panel position="top-right">
             <button
+              type="button"
               onClick={onAutoArrange}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               title="Forget dragged positions and lay the tree out again"
             >
               Auto-arrange
