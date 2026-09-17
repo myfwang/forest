@@ -49,8 +49,11 @@ export default defineSchema({
       v.literal("streaming"),
       v.literal("complete"),
       v.literal("error"),
+      v.literal("cancelled"),
     ),
     aiErrorMessage: v.optional(v.string()),
+    generationUpdatedAt: v.optional(v.number()), // Heartbeat of the last streaming write; stale = stalled
+    cancelRequested: v.optional(v.boolean()), // Checked by the streaming loop between flushes
 
     // Tree structure
     depth: v.number(), // 0 = root, helps with visualization

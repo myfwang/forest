@@ -7,7 +7,7 @@ import {
   query,
 } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireOwnedNode, requireUserId } from "./lib";
+import { requireOwnedNode, requireOwnedTree, requireUserId } from "./lib";
 
 /**
  * Get a node with its full path from root (for breadcrumbs and prompting).
@@ -211,6 +211,33 @@ export const setNodePosition = mutation({
 });
 
 /**
+ * Forget every manually dragged position in a tree so the graph falls back to
+ * the computed layout.
+ */
+export const resetNodePositions = mutation({
+  args: { treeId: v.id("trees") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireOwnedTree(ctx, args.treeId, userId);
+
+    const nodes = await ctx.db
+      .query("nodes")
+      .withIndex("by_tree", (q) => q.eq("treeId", args.treeId))
+      .collect();
+
+    for (const node of nodes) {
+      if (node.positionX === undefined && node.positionY === undefined) {
+        continue;
+      }
+      await ctx.db.patch(node._id, {
+        positionX: undefined,
+        positionY: undefined,
+      });
+    }
+  },
+});
+
+/**
  * Update a node's AI response (used while streaming and on completion).
  */
 export const updateNodeResponse = internalMutation({
@@ -221,6 +248,7 @@ export const updateNodeResponse = internalMutation({
       v.literal("streaming"),
       v.literal("complete"),
       v.literal("error"),
+      v.literal("cancelled"),
     ),
     errorMessage: v.optional(v.string()),
   },
@@ -232,7 +260,39 @@ export const updateNodeResponse = internalMutation({
       aiResponse: args.aiResponse,
       aiResponseStatus: args.status,
       aiErrorMessage: args.errorMessage,
+      generationUpdatedAt: Date.now(),
+      // A fresh streaming run starts with a clean slate; a request to stop
+      // an earlier run must not cancel the retry.
+      ...(args.status === "streaming" && args.aiResponse === ""
+        ? { cancelRequested: false }
+        : {}),
     });
+  },
+});
+
+/**
+ * Whether the user asked to stop the generation running for a node.
+ */
+export const isCancelRequested = internalQuery({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, args) => {
+    const node = await ctx.db.get(args.nodeId);
+    return node?.cancelRequested === true;
+  },
+});
+
+/**
+ * Ask the streaming loop to stop. Whatever has been written so far is kept.
+ */
+export const cancelGeneration = mutation({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, args.nodeId, userId);
+
+    if (node.aiResponseStatus !== "streaming") return;
+
+    await ctx.db.patch(args.nodeId, { cancelRequested: true });
   },
 });
 
