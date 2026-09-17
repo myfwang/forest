@@ -13,6 +13,29 @@ Status as of the branching + gardens + notes work.
   the node through an internal query that intentionally skips auth, so any
   signed-in user could trigger generation on — and read the answer of — another
   user's node. It now verifies the caller owns the node.
+- **Accessibility pass (was Open #4).** Graph nodes now expose
+  `role="button"`, `aria-pressed` and a descriptive `aria-label`
+  (prompt, status, revision flag, note count) via React Flow's `ariaRole` /
+  `ariaLabel` / `domAttributes`; Enter/Space selects a node because
+  `onNodesChange` forwards `select` changes to `onNodeClick`, so keyboard
+  selection follows the same path as clicking. Arrow keys still drag (React
+  Flow's built-in behaviour) and `<Handle>` anchors are untouched. The `⋮`
+  menu is a labelled `aria-haspopup="menu"` button; the menu is
+  `role="menu"`, focuses its first item on open, and Escape closes it and
+  returns focus (stopping propagation so React Flow does not also deselect
+  the node). A global `.react-flow__node:focus-visible` outline restores the
+  ring React Flow's stylesheet removes. `NoteModal` is a `role="dialog"`
+  with `aria-modal`, `aria-labelledby`/`aria-describedby`, a Tab/Shift+Tab
+  focus trap, dialog-wide Escape/Cmd+Enter handling, and focus restoration to
+  the opener on close. `NotesPanel` and `ConversationView` icon-only and
+  text-only controls (chevrons, Rename, folder `<select>`, Edit/Delete,
+  version arrows, Revise/Retry/Note/Delete) have `aria-label`s, folder
+  toggles expose `aria-expanded`/`aria-controls`, and every button has a
+  `focus-visible:ring-2 focus-visible:ring-emerald-500` ring. Contrast: the
+  worst light-mode offenders — `text-slate-400` small text on white (≈2.9:1)
+  and white text on `bg-emerald-600` (≈3.3:1) — were moved to `slate-500`
+  and `bg-emerald-700` in the touched components; placeholder colour was
+  lifted to `slate-500` in light mode.
 - **Manual node positions were never reset.** Once dragged, a node kept its
   saved position even after new siblings shifted the layout, causing overlaps.
   Fixed by an "Auto-arrange" button on the graph (`nodes.resetNodePositions`)
@@ -39,5 +62,10 @@ Status as of the branching + gardens + notes work.
 3. **Garden auto-assignment runs only for root nodes** and can create
    near-duplicate garden names ("React", "React Basics") because matching is
    done by the model, not by normalised comparison.
-4. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
-   focus or ARIA roles. The notes panel folder controls need labels.
+4. **Accessibility follow-ups.** The `⋮` menu button lives inside the
+   `role="button"` graph node wrapper (nested interactive control) because
+   React Flow owns the focusable wrapper; a future pass could move node actions
+   into a toolbar outside the node. `NotesPanel` still renames folders through
+   `window.prompt`. `TreeSidebar`, `app/signin` and the tree page were not
+   audited for contrast or labels in this pass. React Flow's edges are not
+   keyboard-reachable (they are non-interactive here).
