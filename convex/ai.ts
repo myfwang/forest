@@ -1,6 +1,7 @@
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import OpenAI from "openai";
 
 const MISSING_KEY_MESSAGE =
@@ -21,10 +22,15 @@ function openAIClient(): OpenAI | null {
 export const generateResponse = action({
   args: { nodeId: v.id("nodes") },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
     const nodeData = await ctx.runQuery(internal.nodes.getPathForGeneration, {
       nodeId: args.nodeId,
     });
-    if (!nodeData) throw new Error("Node not found");
+    if (!nodeData || nodeData.node.userId !== userId) {
+      throw new Error("Node not found");
+    }
 
     const { node, path } = nodeData;
 
