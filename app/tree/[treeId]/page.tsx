@@ -357,7 +357,7 @@ export default function TreePage({
                         : (e.target.value as Id<"gardens">),
                   })
                 }
-                title="Garden (topic)"
+                title="Forest (topic)"
                 className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
               >
                 <option value="">Unsorted</option>

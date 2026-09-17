@@ -68,6 +68,7 @@ export default defineSchema({
     positionX: v.optional(v.number()),
     positionY: v.optional(v.number()),
   })
+    .index("by_user", ["userId"])
     .index("by_tree", ["treeId"])
     .index("by_parent", ["parentNodeId"])
     .index("by_tree_created", ["treeId", "createdAt"]),

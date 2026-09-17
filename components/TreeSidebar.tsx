@@ -72,10 +72,10 @@ export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
       })),
       ...gardens.map((garden) => ({
         id: `garden-${garden._id}`,
-        group: "Gardens",
+        group: "Forests",
         label: garden.name,
         hint: `${garden.treeCount} ${garden.treeCount === 1 ? "tree" : "trees"}`,
-        run: () => router.push(`/garden/${garden._id}`),
+        run: () => router.push(`/forest/${garden._id}`),
       })),
       {
         id: "action-new-tree",
@@ -86,7 +86,7 @@ export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
       {
         id: "action-new-garden",
         group: "Actions",
-        label: "New garden",
+        label: "New forest",
         run: () => setShowNewGarden(true),
       },
     ];
@@ -122,7 +122,7 @@ export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
       key: garden._id as string,
       name: garden.name,
       color: garden.color,
-      href: `/garden/${garden._id}`,
+      href: `/forest/${garden._id}`,
     })),
     { key: "ungrouped", name: "Unsorted" },
   ];
@@ -137,9 +137,9 @@ export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
           <button
             onClick={() => setShowNewGarden(!showNewGarden)}
             className="text-sm text-slate-400 transition-colors hover:text-slate-200"
-            title="Create a garden"
+            title="Create a forest"
           >
-            + Garden
+            + Forest
           </button>
         </div>
         <button
@@ -164,7 +164,7 @@ export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
               }
               if (e.key === "Escape") setShowNewGarden(false);
             }}
-            placeholder="Garden name"
+            placeholder="Forest name"
             autoFocus
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
@@ -318,7 +318,7 @@ function TreeRow({
           />
           <div className="absolute right-2 top-10 z-20 w-56 rounded-lg border border-slate-700 bg-slate-800 p-2 shadow-xl">
             <p className="px-2 pb-1 text-xs uppercase tracking-wide text-slate-500">
-              Move to garden
+              Move to forest
             </p>
             <select
               value={tree.gardenId ?? ""}
