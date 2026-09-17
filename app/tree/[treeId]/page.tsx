@@ -36,6 +36,7 @@ export default function TreePage({
   const reviseNode = useMutation(api.nodes.reviseNode);
   const regenerateNode = useMutation(api.nodes.regenerateNode);
   const setNodePosition = useMutation(api.nodes.setNodePosition);
+  const resetNodePositions = useMutation(api.nodes.resetNodePositions);
   const deleteNode = useMutation(api.nodes.deleteNode);
   const generateResponse = useAction(api.ai.generateResponse);
   const updateTreeTitle = useMutation(api.trees.updateTreeTitle);
@@ -368,6 +369,9 @@ export default function TreePage({
                 onDeleteNode={handleDeleteNode}
                 onMoveNode={(nodeId, x, y) =>
                   void setNodePosition({ nodeId, positionX: x, positionY: y })
+                }
+                onAutoArrange={() =>
+                  void resetNodePositions({ treeId: resolvedParams.treeId })
                 }
               />
             </div>

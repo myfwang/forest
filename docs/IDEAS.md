@@ -49,9 +49,9 @@ UI.
 
 ## 4. Graph UX
 
-- **Collapse subtrees** with a child count badge; large trees are unreadable today.
+- ~~**Collapse subtrees** with a child count badge~~ — done (client-side, in `TreeGraph`).
 - **Minimap + focus mode** — dim everything except the active path.
-- **Auto-layout toggle** so manual positions can be reset after a tree grows.
+- ~~**Auto-layout toggle**~~ — done ("Auto-arrange" button, `nodes.resetNodePositions`).
 - **Streaming indicator on the edge**, not just the node, so an in-flight branch
   is obvious when zoomed out.
 
