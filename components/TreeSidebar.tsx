@@ -1,11 +1,13 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
+import { CommandItem, CommandPalette } from "@/components/CommandPalette";
+import { isPaletteShortcut } from "@/lib/keyboard";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 function formatDate(timestamp: number): string {
@@ -22,7 +24,12 @@ function formatDate(timestamp: number): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function TreeSidebar() {
+interface TreeSidebarProps {
+  /** Page-specific commands (nodes, notes, actions) merged into the palette. */
+  commands?: CommandItem[];
+}
+
+export function TreeSidebar({ commands = [] }: TreeSidebarProps) {
   const trees = useQuery(api.trees.listTrees, { limit: 200 });
   const gardenData = useQuery(api.gardens.listGardens, {});
   const createGarden = useMutation(api.gardens.createGarden);
@@ -30,6 +37,7 @@ export function TreeSidebar() {
   const pathname = usePathname();
   const { signOut } = useAuthActions();
 
+  const [showPalette, setShowPalette] = useState(false);
   const [showNewTree, setShowNewTree] = useState(false);
   const [newGardenName, setNewGardenName] = useState("");
   const [showNewGarden, setShowNewGarden] = useState(false);
@@ -39,7 +47,50 @@ export function TreeSidebar() {
     ? pathname.split("/")[2]
     : null;
 
-  const gardens = gardenData?.gardens ?? [];
+  const gardens = useMemo(() => gardenData?.gardens ?? [], [gardenData]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isPaletteShortcut(e)) return;
+      e.preventDefault();
+      setShowPalette((open) => !open);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const paletteItems = useMemo<CommandItem[]>(() => {
+    const gardenNames = new Map(gardens.map((g) => [g._id, g.name]));
+    return [
+      ...commands,
+      ...(trees ?? []).map((tree) => ({
+        id: `tree-${tree._id}`,
+        group: "Trees",
+        label: tree.title,
+        hint: tree.gardenId ? gardenNames.get(tree.gardenId) : "Unsorted",
+        run: () => router.push(`/tree/${tree._id}`),
+      })),
+      ...gardens.map((garden) => ({
+        id: `garden-${garden._id}`,
+        group: "Gardens",
+        label: garden.name,
+        hint: `${garden.treeCount} ${garden.treeCount === 1 ? "tree" : "trees"}`,
+        run: () => router.push(`/garden/${garden._id}`),
+      })),
+      {
+        id: "action-new-tree",
+        group: "Actions",
+        label: "New conversation",
+        run: () => setShowNewTree(true),
+      },
+      {
+        id: "action-new-garden",
+        group: "Actions",
+        label: "New garden",
+        run: () => setShowNewGarden(true),
+      },
+    ];
+  }, [commands, trees, gardens, router]);
 
   const grouped = useMemo(() => {
     const groups = new Map<string, Doc<"trees">[]>();
@@ -187,12 +238,33 @@ export function TreeSidebar() {
 
       <div className="border-t border-slate-800 p-4">
         <button
+          onClick={() => setShowPalette(true)}
+          className="mb-1 flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm text-slate-400 transition-colors hover:text-slate-200"
+          title={
+            currentTreeId
+              ? "Command palette (Cmd/Ctrl+K). In a tree: j/k siblings, h parent, l first child"
+              : "Command palette (Cmd/Ctrl+K)"
+          }
+        >
+          <span>Jump to…</span>
+          <kbd className="rounded border border-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
+            ⌘K
+          </kbd>
+        </button>
+        <button
           onClick={() => void signOut().then(() => router.push("/signin"))}
           className="w-full px-2 py-1 text-left text-sm text-slate-400 transition-colors hover:text-slate-200"
         >
           Sign out
         </button>
       </div>
+
+      {showPalette && (
+        <CommandPalette
+          items={paletteItems}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
     </div>
   );
 }

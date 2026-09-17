@@ -5,6 +5,21 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { childrenByParent, NodeDoc, siblingsOf } from "@/lib/tree";
 
+// A generation with no database write for this long is assumed dead.
+const STALL_AFTER_MS = 30_000;
+
+function isGenerating(node: NodeDoc): boolean {
+  return (
+    node.aiResponseStatus === "pending" || node.aiResponseStatus === "streaming"
+  );
+}
+
+function isStalled(node: NodeDoc, now: number): boolean {
+  if (!isGenerating(node)) return false;
+  const lastUpdate = node.generationUpdatedAt ?? node.createdAt;
+  return now - lastUpdate > STALL_AFTER_MS;
+}
+
 interface ConversationViewProps {
   nodes: NodeDoc[];
   path: NodeDoc[];
@@ -13,6 +28,8 @@ interface ConversationViewProps {
   onSelectNode: (nodeId: Id<"nodes">) => void;
   onRevise: (nodeId: Id<"nodes">, prompt: string) => Promise<void>;
   onRegenerate: (nodeId: Id<"nodes">) => Promise<void>;
+  onRetryGeneration: (nodeId: Id<"nodes">) => Promise<void>;
+  onCancelGeneration: (nodeId: Id<"nodes">) => Promise<void>;
   onAddNote: (nodeId: Id<"nodes">) => void;
   onEditNote: (note: Doc<"notes">) => void;
   onDeleteNote: (noteId: Id<"notes">) => void;
@@ -27,6 +44,8 @@ export function ConversationView({
   onSelectNode,
   onRevise,
   onRegenerate,
+  onRetryGeneration,
+  onCancelGeneration,
   onAddNote,
   onEditNote,
   onDeleteNote,
@@ -43,6 +62,17 @@ export function ConversationView({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lastNodeId]);
+
+  // Re-render on a timer while something is generating so a node that stops
+  // receiving writes is flagged as stalled without any further server event.
+  const [now, setNow] = useState(() => Date.now());
+  const anyGenerating = path.some(isGenerating);
+  useEffect(() => {
+    if (!anyGenerating) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [anyGenerating]);
 
   const children = childrenByParent(nodes);
 
@@ -81,6 +111,7 @@ export function ConversationView({
         const nodeNotes = notes.filter((note) => note.nodeId === node._id);
         const isSelected = node._id === selectedNodeId;
         const nextBranches = children.get(node._id) ?? [];
+        const stalled = isStalled(node, now);
 
         return (
           <div
@@ -206,16 +237,55 @@ export function ConversationView({
 
             {/* Response */}
             <div className="p-4">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Assistant
-              </span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Assistant
+                </span>
+                {node.aiResponseStatus === "streaming" && !stalled && (
+                  <button
+                    onClick={() => void onCancelGeneration(node._id)}
+                    disabled={node.cancelRequested === true}
+                    className="px-2 py-1 rounded text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {node.cancelRequested ? "Stopping…" : "Stop"}
+                  </button>
+                )}
+              </div>
               <div className="markdown mt-2 text-sm text-slate-800 dark:text-slate-200">
                 {node.aiResponseStatus === "error" ? (
                   <p className="text-sm text-red-600 dark:text-red-400">
                     {node.aiErrorMessage ?? "Generation failed."}
                   </p>
+                ) : stalled ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {node.aiResponse && (
+                      <div className="w-full">
+                        <ReactMarkdown>{node.aiResponse}</ReactMarkdown>
+                      </div>
+                    )}
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      Generation stalled — the model stopped responding.
+                    </p>
+                    <button
+                      onClick={() => void onRetryGeneration(node._id)}
+                      className="px-2 py-1 rounded border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                    >
+                      Retry generation
+                    </button>
+                  </div>
                 ) : node.aiResponse ? (
-                  <ReactMarkdown>{node.aiResponse}</ReactMarkdown>
+                  <>
+                    <ReactMarkdown>{node.aiResponse}</ReactMarkdown>
+                    {node.aiResponseStatus === "cancelled" && (
+                      <p className="mt-2 text-xs text-slate-400">
+                        Stopped before the answer was finished.
+                      </p>
+                    )}
+                  </>
+                ) : node.aiResponseStatus === "cancelled" ? (
+                  <p className="text-sm text-slate-400">
+                    Stopped before the model answered.
+                  </p>
                 ) : (
                   <p className="text-sm text-slate-400">
                     {node.aiResponseStatus === "pending"
