@@ -3,84 +3,99 @@
 import { useState } from "react";
 
 interface NoteModalProps {
-  isOpen: boolean;
   onClose: () => void;
-  onSave: (content: string) => void;
+  onSave: (content: string, folder: string) => void | Promise<void>;
   initialContent?: string;
+  initialFolder?: string;
+  folders?: string[];
   nodePrompt?: string;
 }
 
+/**
+ * Remount this (via `key`) when the target note changes so the textarea picks
+ * up the new content.
+ */
 export function NoteModal({
-  isOpen,
   onClose,
   onSave,
   initialContent = "",
+  initialFolder = "",
+  folders = [],
   nodePrompt,
 }: NoteModalProps) {
   const [content, setContent] = useState(initialContent);
-
-  if (!isOpen) return null;
+  const [folder, setFolder] = useState(initialFolder);
 
   const handleSave = () => {
-    if (content.trim()) {
-      onSave(content);
-      setContent("");
-      onClose();
-    }
-  };
-
-  const handleClose = () => {
-    setContent("");
+    if (!content.trim()) return;
+    void onSave(content, folder);
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={handleClose}
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div className="relative flex max-h-[80vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-slate-800">
+        <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
           <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-            Add Note
+            {initialContent ? "Edit note" : "Add note"}
           </h2>
           {nodePrompt && (
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+            <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
               For: {nodePrompt}
             </p>
           )}
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-4 flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Type your note here..."
-            className="w-full h-48 px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 resize-none"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onClose();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
+            }}
+            placeholder="Why does this branch matter?"
+            className="h-48 w-full resize-none rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
             autoFocus
           />
+
+          <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Folder
+            <input
+              type="text"
+              value={folder}
+              list="note-folders"
+              onChange={(e) => setFolder(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onClose();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
+              }}
+              placeholder="Unfiled"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <datalist id="note-folders">
+            {folders.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">
           <button
-            onClick={handleClose}
-            className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 text-sm font-medium transition-colors"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!content.trim()}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save Note
+            Save note
           </button>
         </div>
       </div>

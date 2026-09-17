@@ -8,42 +8,58 @@ import { authTables } from "@convex-dev/auth/server";
 export default defineSchema({
   ...authTables,
 
+  // Gardens = Topics that group trees
+  gardens: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_name", ["userId", "name"]),
+
   // Trees = Conversations
   trees: defineTable({
-    userId: v.id("users"),           // Owner of this tree
-    title: v.string(),                // "New Conversation" or custom title
+    userId: v.id("users"), // Owner of this tree
+    title: v.string(), // "New Conversation" or custom title
     rootNodeId: v.optional(v.id("nodes")), // Reference to the first prompt (set after creation)
-    createdAt: v.number(),            // Timestamp
-    updatedAt: v.number(),            // Last activity timestamp
+    gardenId: v.optional(v.id("gardens")), // Topic this tree belongs to
+    gardenIsAutoAssigned: v.optional(v.boolean()), // False once the user moves the tree by hand
+    createdAt: v.number(), // Timestamp
+    updatedAt: v.number(), // Last activity timestamp
     isArchived: v.optional(v.boolean()), // Soft delete/archive
   })
     .index("by_user", ["userId"])
-    .index("by_user_updated", ["userId", "updatedAt"]),
+    .index("by_user_updated", ["userId", "updatedAt"])
+    .index("by_garden", ["gardenId"]),
 
   // Nodes = User prompts + AI responses
   nodes: defineTable({
-    treeId: v.id("trees"),            // Which tree this belongs to
-    userId: v.id("users"),            // Redundant but useful for queries
+    treeId: v.id("trees"), // Which tree this belongs to
+    userId: v.id("users"), // Redundant but useful for queries
     parentNodeId: v.optional(v.id("nodes")), // null = root node
 
     // Content
-    userPrompt: v.string(),           // The user's message
+    userPrompt: v.string(), // The user's message
     aiResponse: v.optional(v.string()), // AI's response (null while generating)
     aiResponseStatus: v.union(
       v.literal("pending"),
       v.literal("streaming"),
       v.literal("complete"),
-      v.literal("error")
+      v.literal("error"),
     ),
     aiErrorMessage: v.optional(v.string()),
 
     // Tree structure
-    depth: v.number(),                // 0 = root, helps with visualization
-    childCount: v.number(),           // Denormalized for quick checks
+    depth: v.number(), // 0 = root, helps with visualization
+    childCount: v.number(), // Denormalized for quick checks
+    revisionOfNodeId: v.optional(v.id("nodes")), // Set when this branch revises a sibling
 
     // Metadata
     createdAt: v.number(),
-    model: v.string(),                // e.g., "gpt-4o", "gpt-4o-mini"
+    model: v.string(), // e.g., "gpt-4o", "gpt-4o-mini"
 
     // Visualization hints (optional, can be client-only)
     positionX: v.optional(v.number()),
@@ -55,12 +71,13 @@ export default defineSchema({
 
   // Notes = User annotations on nodes
   notes: defineTable({
-    userId: v.id("users"),            // Who created this note
-    treeId: v.id("trees"),            // Which tree this belongs to
-    nodeId: v.id("nodes"),            // Which node this note is for
-    content: v.string(),              // The note text
-    createdAt: v.number(),            // When created
-    updatedAt: v.number(),            // Last modified
+    userId: v.id("users"), // Who created this note
+    treeId: v.id("trees"), // Which tree this belongs to
+    nodeId: v.id("nodes"), // Which node this note is for
+    content: v.string(), // The note text
+    folder: v.optional(v.string()), // Folder name within the tree; unset = unfiled
+    createdAt: v.number(), // When created
+    updatedAt: v.number(), // Last modified
   })
     .index("by_tree", ["treeId"])
     .index("by_node", ["nodeId"])
