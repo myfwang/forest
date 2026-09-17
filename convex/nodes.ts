@@ -7,7 +7,7 @@ import {
   query,
 } from "./_generated/server";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireOwnedNode, requireUserId } from "./lib";
+import { requireOwnedNode, requireOwnedTree, requireUserId } from "./lib";
 
 /**
  * Get a node with its full path from root (for breadcrumbs and prompting).
@@ -207,6 +207,33 @@ export const setNodePosition = mutation({
       positionX: args.positionX,
       positionY: args.positionY,
     });
+  },
+});
+
+/**
+ * Forget every manually dragged position in a tree so the graph falls back to
+ * the computed layout.
+ */
+export const resetNodePositions = mutation({
+  args: { treeId: v.id("trees") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    await requireOwnedTree(ctx, args.treeId, userId);
+
+    const nodes = await ctx.db
+      .query("nodes")
+      .withIndex("by_tree", (q) => q.eq("treeId", args.treeId))
+      .collect();
+
+    for (const node of nodes) {
+      if (node.positionX === undefined && node.positionY === undefined) {
+        continue;
+      }
+      await ctx.db.patch(node._id, {
+        positionX: undefined,
+        positionY: undefined,
+      });
+    }
   },
 });
 
