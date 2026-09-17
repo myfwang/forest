@@ -13,6 +13,12 @@ Status as of the branching + gardens + notes work.
   the node through an internal query that intentionally skips auth, so any
   signed-in user could trigger generation on — and read the answer of — another
   user's node. It now verifies the caller owns the node.
+- **Manual node positions were never reset.** Once dragged, a node kept its
+  saved position even after new siblings shifted the layout, causing overlaps.
+  Fixed by an "Auto-arrange" button on the graph (`nodes.resetNodePositions`)
+  that clears every saved position in the tree so the computed layout takes
+  over. Subtrees can also be collapsed/expanded from a child-count badge
+  (client-side only) to keep large trees readable.
 - **Nodes could get stuck in `streaming`.** Every write from the streaming loop
   now stamps `generationUpdatedAt` on the node. The conversation view treats a
   `pending`/`streaming` node with no write for 30s as stalled and shows a
@@ -26,15 +32,12 @@ Status as of the branching + gardens + notes work.
 
 ## Open
 
-1. **Manual node positions are never reset.** Once dragged, a node keeps its
-   saved position even after new siblings shift the layout, causing overlaps.
-   Needs an "auto-arrange" action.
-2. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
+1. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
    the tree delete path does the same for every node in the tree.
-3. **No optimistic UI for branch creation.** The new node only appears after the
+2. **No optimistic UI for branch creation.** The new node only appears after the
    mutation round-trips, which reads as lag on slow connections.
-4. **Garden auto-assignment runs only for root nodes** and can create
+3. **Garden auto-assignment runs only for root nodes** and can create
    near-duplicate garden names ("React", "React Basics") because matching is
    done by the model, not by normalised comparison.
-5. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
+4. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
    focus or ARIA roles. The notes panel folder controls need labels.
