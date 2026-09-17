@@ -45,6 +45,8 @@ export function ConversationView({
   }, [lastNodeId]);
 
   const children = childrenByParent(nodes);
+  const focusRing =
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
 
   const startRevision = (node: NodeDoc) => {
     setRevisingNodeId(node._id);
@@ -74,7 +76,11 @@ export function ConversationView({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+    <div
+      className="flex-1 overflow-y-auto px-6 py-6 space-y-8"
+      role="region"
+      aria-label="Conversation"
+    >
       {path.map((node) => {
         const siblings = siblingsOf(nodes, node);
         const siblingIndex = siblings.findIndex((s) => s._id === node._id);
@@ -83,8 +89,9 @@ export function ConversationView({
         const nextBranches = children.get(node._id) ?? [];
 
         return (
-          <div
+          <article
             key={node._id}
+            aria-current={isSelected ? "true" : undefined}
             className={`rounded-xl border transition-colors ${
               isSelected
                 ? "border-emerald-400 dark:border-emerald-600"
@@ -101,6 +108,7 @@ export function ConversationView({
                   {siblings.length > 1 && (
                     <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                       <button
+                        type="button"
                         onClick={() =>
                           onSelectNode(
                             siblings[
@@ -109,50 +117,59 @@ export function ConversationView({
                             ]._id,
                           )
                         }
-                        className="px-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-                        title="Previous version of this prompt"
+                        className={`px-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${focusRing}`}
+                        aria-label="Previous version of this prompt"
                       >
-                        ‹
+                        <span aria-hidden="true">‹</span>
                       </button>
-                      <span>
+                      <span aria-live="polite">
                         version {siblingIndex + 1}/{siblings.length}
                       </span>
                       <button
+                        type="button"
                         onClick={() =>
                           onSelectNode(
                             siblings[(siblingIndex + 1) % siblings.length]._id,
                           )
                         }
-                        className="px-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-                        title="Next version of this prompt"
+                        className={`px-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${focusRing}`}
+                        aria-label="Next version of this prompt"
                       >
-                        ›
+                        <span aria-hidden="true">›</span>
                       </button>
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-xs">
                   <button
+                    type="button"
                     onClick={() => startRevision(node)}
-                    className="px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Revise this prompt"
+                    className={`px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 ${focusRing}`}
                   >
                     Revise
                   </button>
                   <button
+                    type="button"
                     onClick={() => void onRegenerate(node._id)}
-                    className="px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Retry the response to this prompt"
+                    className={`px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 ${focusRing}`}
                   >
                     Retry
                   </button>
                   <button
+                    type="button"
                     onClick={() => onAddNote(node._id)}
-                    className="px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Add a note to this prompt"
+                    className={`px-2 py-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 ${focusRing}`}
                   >
                     Note
                   </button>
                   <button
+                    type="button"
                     onClick={() => onDeleteNode(node._id)}
-                    className="px-2 py-1 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    aria-label="Delete this branch"
+                    className={`px-2 py-1 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 ${focusRing}`}
                   >
                     Delete
                   </button>
@@ -173,31 +190,36 @@ export function ConversationView({
                     }}
                     rows={4}
                     autoFocus
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    aria-label="Revised prompt"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => void submitRevision(node._id)}
                       disabled={busy || !revisedPrompt.trim()}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium disabled:opacity-50"
+                      className={`px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium disabled:opacity-50 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 ${focusRing}`}
                     >
                       Send as new version
                     </button>
                     <button
+                      type="button"
                       onClick={() => setRevisingNodeId(null)}
-                      className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                      className={`px-3 py-1.5 rounded text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 ${focusRing}`}
                     >
                       Cancel
                     </button>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       The original wording and its replies are kept.
                     </span>
                   </div>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => onSelectNode(node._id)}
-                  className="text-left w-full text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap"
+                  aria-pressed={isSelected}
+                  className={`text-left w-full rounded text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap ${focusRing}`}
                 >
                   {node.userPrompt}
                 </button>
@@ -217,7 +239,10 @@ export function ConversationView({
                 ) : node.aiResponse ? (
                   <ReactMarkdown>{node.aiResponse}</ReactMarkdown>
                 ) : (
-                  <p className="text-sm text-slate-400">
+                  <p
+                    className="text-sm text-slate-500 dark:text-slate-400"
+                    role="status"
+                  >
                     {node.aiResponseStatus === "pending"
                       ? "Waiting for the model…"
                       : "Generating…"}
@@ -238,14 +263,18 @@ export function ConversationView({
                       {note.content}
                     </p>
                     <button
+                      type="button"
                       onClick={() => onEditNote(note)}
-                      className="text-xs text-amber-700 dark:text-amber-300 opacity-60 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                      aria-label="Edit note"
+                      className={`rounded px-1 text-xs text-amber-800 dark:text-amber-300 opacity-80 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${focusRing}`}
                     >
                       Edit
                     </button>
                     <button
+                      type="button"
                       onClick={() => onDeleteNote(note._id)}
-                      className="text-xs text-red-600 dark:text-red-400 opacity-60 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                      aria-label="Delete note"
+                      className={`rounded px-1 text-xs text-red-700 dark:text-red-400 opacity-80 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${focusRing}`}
                     >
                       Delete
                     </button>
@@ -262,11 +291,13 @@ export function ConversationView({
                   return (
                     <button
                       key={branch._id}
+                      type="button"
                       onClick={() => onSelectNode(branch._id)}
-                      className={`text-xs px-2 py-1 rounded-full border max-w-[220px] truncate ${
+                      aria-pressed={onPath}
+                      className={`text-xs px-2 py-1 rounded-full border max-w-[220px] truncate ${focusRing} ${
                         onPath
-                          ? "border-emerald-400 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20"
-                          : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          ? "border-emerald-400 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/20"
+                          : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                       }`}
                       title={branch.userPrompt}
                     >
@@ -276,7 +307,7 @@ export function ConversationView({
                 })}
               </div>
             )}
-          </div>
+          </article>
         );
       })}
       <div ref={bottomRef} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 
 const UNFILED = "Unfiled";
@@ -76,11 +76,20 @@ export function NotesPanel({
   };
 
   const folderOptions = [...new Set([...folders, UNFILED])];
+  const headingId = useId();
+  const focusRing =
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-slate-900">
+    <section
+      aria-labelledby={headingId}
+      className="flex h-full flex-col bg-white dark:bg-slate-900"
+    >
       <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+        <h2
+          id={headingId}
+          className="text-sm font-semibold text-slate-800 dark:text-slate-200"
+        >
           Notes
         </h2>
         <input
@@ -88,7 +97,8 @@ export function NotesPanel({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search notes…"
-          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          aria-label="Search notes"
+          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
         />
       </div>
 
@@ -99,29 +109,39 @@ export function NotesPanel({
           </p>
         )}
 
-        {grouped.map(([folder, items]) => (
+        {grouped.map(([folder, items], index) => (
           <div key={folder} className="mb-2">
             <div className="flex items-center gap-1 px-2">
               <button
+                type="button"
                 onClick={() => toggleFolder(folder)}
-                className="flex flex-1 items-center gap-2 py-1 text-left text-sm font-medium text-slate-700 dark:text-slate-300"
+                aria-expanded={!collapsed.has(folder)}
+                aria-controls={`${headingId}-folder-${index}`}
+                className={`flex flex-1 items-center gap-2 rounded py-1 text-left text-sm font-medium text-slate-700 dark:text-slate-300 ${focusRing}`}
               >
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500" aria-hidden="true">
                   {collapsed.has(folder) ? "▸" : "▾"}
                 </span>
                 <span className="truncate">{folder}</span>
-                <span className="text-xs text-slate-400">{items.length}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <span className="sr-only">, </span>
+                  {items.length}
+                  <span className="sr-only">
+                    {items.length === 1 ? " note" : " notes"}
+                  </span>
+                </span>
               </button>
               {folder !== UNFILED && (
                 <button
+                  type="button"
                   onClick={() => {
                     const next = prompt("Rename folder", folder);
                     if (next && next.trim() && next.trim() !== folder) {
                       onRenameFolder(folder, next.trim());
                     }
                   }}
-                  className="rounded px-1 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                  title="Rename folder"
+                  className={`rounded px-1 text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 ${focusRing}`}
+                  aria-label={`Rename folder ${folder}`}
                 >
                   Rename
                 </button>
@@ -129,7 +149,11 @@ export function NotesPanel({
             </div>
 
             {!collapsed.has(folder) && (
-              <ul className="space-y-1 py-1">
+              <ul
+                id={`${headingId}-folder-${index}`}
+                aria-label={`Notes in ${folder}`}
+                className="space-y-1 py-1"
+              >
                 {items.map((note) => (
                   <li
                     key={note._id}
@@ -140,8 +164,10 @@ export function NotesPanel({
                     }`}
                   >
                     <button
+                      type="button"
                       onClick={() => onSelectNode(note.nodeId)}
-                      className="block w-full text-left"
+                      aria-label={`Go to prompt: ${promptByNode.get(note.nodeId) ?? "deleted prompt"}`}
+                      className={`block w-full rounded text-left ${focusRing}`}
                     >
                       <p className="line-clamp-3 whitespace-pre-wrap text-slate-800 dark:text-slate-200">
                         {note.content}
@@ -161,8 +187,8 @@ export function NotesPanel({
                               : e.target.value,
                           )
                         }
-                        className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                        title="Folder"
+                        className={`rounded border border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 ${focusRing}`}
+                        aria-label="Move note to folder"
                       >
                         {[
                           ...new Set([
@@ -176,14 +202,18 @@ export function NotesPanel({
                         ))}
                       </select>
                       <button
+                        type="button"
                         onClick={() => onEditNote(note)}
-                        className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                        aria-label="Edit note"
+                        className={`rounded px-1 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 ${focusRing}`}
                       >
                         Edit
                       </button>
                       <button
+                        type="button"
                         onClick={() => onDeleteNote(note._id)}
-                        className="text-xs text-slate-500 hover:text-red-600"
+                        aria-label="Delete note"
+                        className={`rounded px-1 text-xs text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 ${focusRing}`}
                       >
                         Delete
                       </button>
@@ -195,6 +225,6 @@ export function NotesPanel({
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
