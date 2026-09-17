@@ -248,6 +248,7 @@ export const updateNodeResponse = internalMutation({
       v.literal("streaming"),
       v.literal("complete"),
       v.literal("error"),
+      v.literal("cancelled"),
     ),
     errorMessage: v.optional(v.string()),
   },
@@ -259,7 +260,39 @@ export const updateNodeResponse = internalMutation({
       aiResponse: args.aiResponse,
       aiResponseStatus: args.status,
       aiErrorMessage: args.errorMessage,
+      generationUpdatedAt: Date.now(),
+      // A fresh streaming run starts with a clean slate; a request to stop
+      // an earlier run must not cancel the retry.
+      ...(args.status === "streaming" && args.aiResponse === ""
+        ? { cancelRequested: false }
+        : {}),
     });
+  },
+});
+
+/**
+ * Whether the user asked to stop the generation running for a node.
+ */
+export const isCancelRequested = internalQuery({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, args) => {
+    const node = await ctx.db.get(args.nodeId);
+    return node?.cancelRequested === true;
+  },
+});
+
+/**
+ * Ask the streaming loop to stop. Whatever has been written so far is kept.
+ */
+export const cancelGeneration = mutation({
+  args: { nodeId: v.id("nodes") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const node = await requireOwnedNode(ctx, args.nodeId, userId);
+
+    if (node.aiResponseStatus !== "streaming") return;
+
+    await ctx.db.patch(args.nodeId, { cancelRequested: true });
   },
 });
 

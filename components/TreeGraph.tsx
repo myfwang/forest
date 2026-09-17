@@ -54,6 +54,7 @@ const STATUS_LABEL: Record<NodeDoc["aiResponseStatus"], string> = {
   streaming: "writing…",
   complete: "answered",
   error: "failed",
+  cancelled: "stopped",
 };
 
 function nodeAriaLabel(data: CustomNodeData) {
