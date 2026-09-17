@@ -4,8 +4,10 @@ import { useState } from "react";
 
 interface NoteModalProps {
   onClose: () => void;
-  onSave: (content: string) => void | Promise<void>;
+  onSave: (content: string, folder: string) => void | Promise<void>;
   initialContent?: string;
+  initialFolder?: string;
+  folders?: string[];
   nodePrompt?: string;
 }
 
@@ -17,13 +19,16 @@ export function NoteModal({
   onClose,
   onSave,
   initialContent = "",
+  initialFolder = "",
+  folders = [],
   nodePrompt,
 }: NoteModalProps) {
   const [content, setContent] = useState(initialContent);
+  const [folder, setFolder] = useState(initialFolder);
 
   const handleSave = () => {
     if (!content.trim()) return;
-    void onSave(content);
+    void onSave(content, folder);
     onClose();
   };
 
@@ -55,6 +60,27 @@ export function NoteModal({
             className="h-48 w-full resize-none rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
             autoFocus
           />
+
+          <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Folder
+            <input
+              type="text"
+              value={folder}
+              list="note-folders"
+              onChange={(e) => setFolder(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onClose();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
+              }}
+              placeholder="Unfiled"
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+          <datalist id="note-folders">
+            {folders.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </div>
 
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 dark:border-slate-700">

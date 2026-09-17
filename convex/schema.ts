@@ -75,6 +75,7 @@ export default defineSchema({
     treeId: v.id("trees"), // Which tree this belongs to
     nodeId: v.id("nodes"), // Which node this note is for
     content: v.string(), // The note text
+    folder: v.optional(v.string()), // Folder name within the tree; unset = unfiled
     createdAt: v.number(), // When created
     updatedAt: v.number(), // Last modified
   })

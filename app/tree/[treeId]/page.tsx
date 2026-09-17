@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, use } from "react";
 import { TreeSidebar } from "@/components/TreeSidebar";
 import { TreeGraph } from "@/components/TreeGraph";
 import { NoteModal } from "@/components/NoteModal";
+import { NotesPanel } from "@/components/NotesPanel";
 import { ConversationView } from "@/components/ConversationView";
 import { latestLeaf, pathToNode } from "@/lib/tree";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,9 @@ export default function TreePage({
     treeId: resolvedParams.treeId,
   });
   const gardenData = useQuery(api.gardens.listGardens, {});
+  const folderData = useQuery(api.notes.listFolders, {
+    treeId: resolvedParams.treeId,
+  });
 
   const createBranch = useMutation(api.nodes.createBranch);
   const reviseNode = useMutation(api.nodes.reviseNode);
@@ -39,6 +43,8 @@ export default function TreePage({
   const createNote = useMutation(api.notes.createNote);
   const updateNote = useMutation(api.notes.updateNote);
   const deleteNote = useMutation(api.notes.deleteNote);
+  const moveNoteToFolder = useMutation(api.notes.moveNoteToFolder);
+  const renameFolder = useMutation(api.notes.renameFolder);
 
   const [selectedNodeId, setSelectedNodeId] = useState<Id<"nodes"> | null>(
     null,
@@ -48,6 +54,7 @@ export default function TreePage({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [showMap, setShowMap] = useState(true);
+  const [showNotes, setShowNotes] = useState(false);
   const [noteTarget, setNoteTarget] = useState<{
     nodeId: Id<"nodes">;
     note?: Doc<"notes">;
@@ -119,6 +126,7 @@ export default function TreePage({
 
   const tree = data.tree;
   const gardens = gardenData?.gardens ?? [];
+  const folders = (folderData ?? []).map((folder) => folder.name);
 
   const runPrompt = async (nodeId: Id<"nodes">) => {
     setSelectedNodeId(nodeId);
@@ -158,12 +166,21 @@ export default function TreePage({
     setIsEditingTitle(false);
   };
 
-  const handleSaveNote = async (content: string) => {
+  const handleSaveNote = async (content: string, folder: string) => {
     if (!noteTarget) return;
+    const target = folder.trim() === "" ? undefined : folder.trim();
     if (noteTarget.note) {
-      await updateNote({ noteId: noteTarget.note._id, content });
+      await updateNote({
+        noteId: noteTarget.note._id,
+        content,
+        folder: target,
+      });
     } else {
-      await createNote({ nodeId: noteTarget.nodeId, content });
+      await createNote({
+        nodeId: noteTarget.nodeId,
+        content,
+        folder: target,
+      });
     }
   };
 
@@ -249,6 +266,12 @@ export default function TreePage({
                 ))}
               </select>
               <button
+                onClick={() => setShowNotes(!showNotes)}
+                className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                {showNotes ? "Hide notes" : "Notes"}
+              </button>
+              <button
                 onClick={() => setShowMap(!showMap)}
                 className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
               >
@@ -311,6 +334,28 @@ export default function TreePage({
             </div>
           </div>
 
+          {showNotes && (
+            <div className="w-[340px] flex-shrink-0 border-l border-slate-200 dark:border-slate-800">
+              <NotesPanel
+                notes={notes ?? []}
+                nodes={nodes}
+                folders={folders}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={setSelectedNodeId}
+                onEditNote={(note) =>
+                  setNoteTarget({ nodeId: note.nodeId, note })
+                }
+                onDeleteNote={(noteId) => void deleteNote({ noteId })}
+                onMoveNote={(noteId, folder) =>
+                  void moveNoteToFolder({ noteId, folder })
+                }
+                onRenameFolder={(from, to) =>
+                  void renameFolder({ treeId: tree._id, from, to })
+                }
+              />
+            </div>
+          )}
+
           {showMap && (
             <div className="w-[480px] flex-shrink-0 border-l border-slate-200 dark:border-slate-800">
               <TreeGraph
@@ -336,6 +381,8 @@ export default function TreePage({
           onClose={() => setNoteTarget(null)}
           onSave={handleSaveNote}
           initialContent={noteTarget.note?.content ?? ""}
+          initialFolder={noteTarget.note?.folder ?? ""}
+          folders={folders}
           nodePrompt={
             nodes.find((node) => node._id === noteTarget.nodeId)?.userPrompt
           }
