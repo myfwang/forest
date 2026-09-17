@@ -19,23 +19,25 @@ Status as of the branching + gardens + notes work.
   that clears every saved position in the tree so the computed layout takes
   over. Subtrees can also be collapsed/expanded from a child-count badge
   (client-side only) to keep large trees readable.
+- **Nodes could get stuck in `streaming`.** Every write from the streaming loop
+  now stamps `generationUpdatedAt` on the node. The conversation view treats a
+  `pending`/`streaming` node with no write for 30s as stalled and shows a
+  "Retry generation" button that re-runs `ai.generateResponse` on the same
+  node.
+- **No cancel for an in-flight generation.** `nodes.cancelGeneration` sets
+  `cancelRequested`; the streaming loop checks it on every flush, aborts the
+  OpenAI stream and stores the partial text with status `cancelled`.
+- **Streaming only flushed every 10 chunks.** Partial output is now also flushed
+  when 500ms have passed since the last write, so early tokens show up.
 
 ## Open
 
-1. **Nodes can get stuck in `streaming`.** If the action dies mid-stream (reload,
-   deploy, OpenAI error outside the try block) the node keeps `streaming` forever
-   with no retry affordance. Needs a stale-generation timeout and a "retry"
-   button on the node.
-2. **No cancel for an in-flight generation.** Long answers cannot be stopped.
-3. **Streaming writes every 10 chunks and never flushes the tail early**, so the
-   last partial chunk only lands with the `complete` write; short answers can
-   look frozen.
-4. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
+1. **Deleting a tree may orphan notes.** Node deletion cleans up notes; verify
    the tree delete path does the same for every node in the tree.
-5. **No optimistic UI for branch creation.** The new node only appears after the
+2. **No optimistic UI for branch creation.** The new node only appears after the
    mutation round-trips, which reads as lag on slow connections.
-6. **Garden auto-assignment runs only for root nodes** and can create
+3. **Garden auto-assignment runs only for root nodes** and can create
    near-duplicate garden names ("React", "React Basics") because matching is
    done by the model, not by normalised comparison.
-7. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
+4. **Accessibility:** graph nodes are `div`s with click handlers; no keyboard
    focus or ARIA roles. The notes panel folder controls need labels.

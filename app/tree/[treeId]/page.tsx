@@ -46,6 +46,7 @@ export default function TreePage({
   const setNodePosition = useMutation(api.nodes.setNodePosition);
   const resetNodePositions = useMutation(api.nodes.resetNodePositions);
   const deleteNode = useMutation(api.nodes.deleteNode);
+  const cancelGeneration = useMutation(api.nodes.cancelGeneration);
   const generateResponse = useAction(api.ai.generateResponse);
   const updateTreeTitle = useMutation(api.trees.updateTreeTitle);
   const moveTreeToGarden = useMutation(api.gardens.moveTreeToGarden);
@@ -392,6 +393,10 @@ export default function TreePage({
               onSelectNode={setSelectedNodeId}
               onRevise={handleRevise}
               onRegenerate={handleRegenerate}
+              onRetryGeneration={runPrompt}
+              onCancelGeneration={async (nodeId) => {
+                await cancelGeneration({ nodeId });
+              }}
               onAddNote={(nodeId) => setNoteTarget({ nodeId })}
               onEditNote={(note) =>
                 setNoteTarget({ nodeId: note.nodeId, note })
